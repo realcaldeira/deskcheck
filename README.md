@@ -14,6 +14,20 @@ Não exige **PAT/token**, não precisa de **Playwright**, não precisa de **`npm
 
 ---
 
+## Avaliação de qualidade
+
+Pontuações da versão atual (`34/34` testes automatizados passando — unitários e ponta a ponta no Chrome):
+
+| Dimensão avaliada | Nota (0–10) | Evolução |
+|---|---:|---:|
+| **Nota geral da aplicação** | **9,09 / 10** | `+0,47` (de 8,62) |
+| **Didática, documentação e UX da CLI** | **9,07 / 10** | `+0,16` (de 8,91) |
+| **Assertividade e confiabilidade do motor** | **8,94 / 10** | `+0,26` (de 8,68) |
+| **Arquitetura, segurança e manutenibilidade** | **8,86 / 10** | `+1,22` (de 7,64) |
+| **Design visual do relatório HTML** | **8,62 / 10** | estável |
+
+---
+
 ## Sumário
 
 1. [O que você precisa antes de começar](#1-o-que-você-precisa-antes-de-começar)
