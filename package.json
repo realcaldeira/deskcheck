@@ -1,0 +1,13 @@
+{
+  "name": "deskcheck",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Desk check de histórias do Azure DevOps: lê o card pela sessão do navegador, roda os cenários num Chrome próprio e gera o relatório com evidências.",
+  "bin": { "deskcheck": "bin/deskcheck.mjs" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/",
+    "sync-skill": "node scripts/sync-skill.mjs"
+  }
+}

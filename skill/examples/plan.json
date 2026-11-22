@@ -1,0 +1,54 @@
+{
+  "workItem": 0,
+  "title": "Demo: filtro de status",
+  "viewport": { "width": 1280, "height": 800 },
+  "beforeEach": [{ "do": "goto", "url": "demo.html" }],
+  "scenarios": [
+    {
+      "id": "S1",
+      "title": "Lista abre em All Status com todos os parceiros",
+      "ac": ["AC-1"],
+      "expected": "O filtro de status abre em All Status e mostra os 3 parceiros.",
+      "steps": [
+        { "do": "expectValue", "label": "Filter by status", "value": "" },
+        { "do": "expectCount", "selector": "[data-testid=row]", "count": 3 },
+        { "do": "screenshot", "label": "lista inicial" }
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "Filtrar por Approve mostra só os aprovados",
+      "ac": ["AC-2"],
+      "expected": "Depois de Apply, só aparecem parceiros com Approve.",
+      "steps": [
+        { "do": "select", "label": "Filter by status", "value": "Approve" },
+        { "do": "click", "role": "button", "name": "Apply" },
+        { "do": "expectText", "text": "Filters applied" },
+        { "do": "expectCount", "selector": "[data-testid=row]", "count": 2 },
+        { "do": "expectNoText", "text": "Partner Beta" },
+        { "do": "screenshot", "label": "filtrado por Approve" }
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "Busca sem resultado mostra estado vazio",
+      "ac": ["AC-3"],
+      "expected": "Mensagem No partner found.",
+      "steps": [
+        { "do": "fill", "label": "Search partner", "value": "zzz" },
+        { "do": "click", "text": "Apply" },
+        { "do": "expectText", "text": "No partner found" },
+        { "do": "screenshot", "label": "estado vazio" }
+      ]
+    },
+    {
+      "id": "S4",
+      "title": "Falha planejada: título com outro texto",
+      "ac": ["AC-4"],
+      "expected": "Título Pending my actions (não existe na demo: este cenário deve falhar).",
+      "steps": [
+        { "do": "expectText", "text": "Pending my actions", "timeout": 1500 }
+      ]
+    }
+  ]
+}
