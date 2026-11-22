@@ -6,6 +6,14 @@ Não exige **PAT/token**, não precisa de **Playwright**, não precisa de **`npm
 
 ---
 
+## Demonstração
+
+![Demonstração do deskcheck em ação](docs/demo.gif)
+
+> Quer assistir em alta definição (1280×720 · 30 fps)? Veja [docs/demo.mp4](docs/demo.mp4).
+
+---
+
 ## Sumário
 
 1. [O que você precisa antes de começar](#1-o-que-você-precisa-antes-de-começar)
