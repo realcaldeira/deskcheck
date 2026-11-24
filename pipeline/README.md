@@ -36,6 +36,8 @@ O agente recebe o roteiro `harness/desk-check.md`.
 
 Durante o desk check, `harness/guard` vai na frente do PATH do agente: `git commit/push/reset/merge/rebase…`, `gh api` e `gh pr create/comment/review/merge…`, `az … create/update/delete/invoke…` e `deskcheck defect/evidence/mark/apply` saem com código 87. No fim, a esteira confere se algum arquivo do código do colega mudou.
 
+**Limite da trava:** ela é uma barreira no `PATH`, não um isolamento completo. Pega o agente que chama `git`, `gh` e `az` normalmente, mas não impede um processo de chamar esses programas pelo caminho completo. A proteção de fato contra gravação é a credencial que o agente recebe: prefira contas e tokens só de leitura.
+
 ## Estrutura
 
 | Caminho | O que é |

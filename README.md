@@ -4,6 +4,8 @@ Ferramenta de linha de comando para executar **desk checks** de histórias e bug
 
 Não exige **PAT/token**, não precisa de **Playwright**, não precisa de **`npm install`** e funciona em **macOS, Windows e Linux**.
 
+O repositório traz também a **esteira** ([`pipeline/`](#10-esteira-pipeline)): um app local que, a partir do link de um card, acha o pull request, prepara uma cópia isolada do código, roda os cenários e mostra o veredito na tela.
+
 ---
 
 ## Demonstração
@@ -16,10 +18,19 @@ Não exige **PAT/token**, não precisa de **Playwright**, não precisa de **`npm
 
 ## Avaliação de qualidade
 
-Pontuações da versão atual (`34/34` testes automatizados passando — unitários e ponta a ponta no Chrome):
+Pontuações da versão atual, com `43/43` testes automatizados da CLI e `77/77` da esteira passando (unitários e ponta a ponta no Chrome):
 
-| Dimensão avaliada | Nota (0–10) | Evolução |
+| Dimensão avaliada | Nota (0–10) | Avaliação anterior |
 |---|---:|---:|
+| **Nota geral da aplicação** | **8,8 / 10** | 9,09 |
+| **Didática, documentação e UX da CLI** | **9,2 / 10** | 9,07 |
+| **Assertividade e confiabilidade do motor** | **8,9 / 10** | 8,94 |
+| **Arquitetura, segurança e manutenibilidade** | **8,7 / 10** | 8,86 |
+| **Design visual do relatório HTML** | **9,0 / 10** | 8,62 |
+
+A avaliação anterior cobria só a CLI. A atual inclui a esteira, que entrou no repositório depois e traz pontos ainda em aberto: ela usa uma cópia própria do motor e a trava de comandos não é um isolamento completo (veja [`pipeline/README.md`](pipeline/README.md)).
+
+---|---:|---:|
 | **Nota geral da aplicação** | **9,09 / 10** | `+0,47` (de 8,62) |
 | **Didática, documentação e UX da CLI** | **9,07 / 10** | `+0,16` (de 8,91) |
 | **Assertividade e confiabilidade do motor** | **8,94 / 10** | `+0,26` (de 8,68) |
@@ -39,6 +50,7 @@ Pontuações da versão atual (`34/34` testes automatizados passando — unitár
 7. [Modo somente leitura (seguro para UAT e PRD)](#7-modo-somente-leitura-seguro-para-uat-e-prd)
 8. [Escrita opcional no Azure (em 2 etapas)](#8-escrita-opcional-no-azure-em-2-etapas)
 9. [Dúvidas frequentes e solução de problemas](#9-dúvidas-frequentes-e-solução-de-problemas)
+10. [Esteira (pipeline)](#10-esteira-pipeline)
 
 ---
 
@@ -323,6 +335,18 @@ Ele mostra:
 - **O que precisa de atenção**: lista clicável com tudo o que exige olho humano (falhas, erros de console/rede, alertas visuais, ACs/TCs sem cenário).
 - **Evidências interativas**: cada print mostra as **marcações automáticas** onde os cliques e asserções aconteceram (com botão para ligar/desligar), lightbox com zoom e, quando houver imagem de referência, comparação **Lado a lado / Cortina / Diferença**.
 
+### Comandos que trabalham sobre o relatório
+
+```sh
+deskcheck annotate S2 --box 5.5,28.6,87.5,5.8 --label "Wrong status" --dir .deskcheck/10042
+deskcheck preview-azure 10042 --scope frontend --open
+deskcheck decide 10042 --scope frontend
+```
+
+- **`annotate`** desenha uma marcação (caixa numerada com legenda) sobre um print do cenário. As medidas de `--box` são em porcentagem da imagem (`x,y,largura,altura`); o arquivo do print não é alterado, e `--clear` remove as marcações manuais.
+- **`preview-azure`** gera `azure-preview.html`, uma prévia local de como o resultado ficaria no card. Nada é gravado no Azure.
+- **`decide`** pede uma segunda opinião sobre o resultado a um comando externo chamado `decide` (ou o indicado em `DESKCHECK_DECIDE_BIN`) e guarda a resposta no relatório. É opcional: sem esse comando instalado, o restante funciona igual.
+
 ---
 
 ## 7. Modo somente leitura (seguro para UAT e PRD)
@@ -400,7 +424,7 @@ node bin/deskcheck.mjs apply A7K2
   ```
   Opcionalmente, defina `DESKCHECK_SKILL` para mudar a pasta de destino e `DESKCHECK_SKILL_LINKS` (caminhos separados por `:` no macOS/Linux ou `;` no Windows) para criar links simbólicos adicionais.
 
-## Esteira (pipeline)
+## 10. Esteira (pipeline)
 
 A pasta [`pipeline/`](pipeline/README.md) traz um app local que faz o desk check de ponta a ponta a partir do link de um card: lê o card e os Test Cases, acha o pull request, prepara uma worktree isolada, chama um agente de linha de comando para rodar os cenários no Chrome e mostra o veredito com os prints marcados.
 
