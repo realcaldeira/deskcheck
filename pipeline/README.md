@@ -32,6 +32,10 @@ A esteira chama, em modo não interativo, um agente de linha de comando já loga
 
 O agente recebe o roteiro `harness/desk-check.md`.
 
+## Preparo em janela visível
+
+Com **Dados reais**, a opção **Abrir o navegador antes de testar (login / preparo)** vem ligada. Antes de rodar os cenários, a esteira abre o ambiente escolhido numa janela visível do Chrome (perfil próprio do deskcheck) e espera: você faz login, fecha avisos e deixa a tela no estado que quer testar. Ao clicar em **Continuar e testar** (ou fechar a janela), a sessão fica guardada e os cenários rodam, também em janela visível, um por Test Case do card. Já está logado? Desligue a opção para ir direto aos testes.
+
 ## Trava de somente leitura
 
 Durante o desk check, `harness/guard` vai na frente do PATH do agente: `git commit/push/reset/merge/rebase…`, `gh api` e `gh pr create/comment/review/merge…`, `az … create/update/delete/invoke…` e `deskcheck defect/evidence/mark/apply` saem com código 87. No fim, a esteira confere se algum arquivo do código do colega mudou.

@@ -25,7 +25,7 @@ const ENV = { ...process.env, PATH: `${NODE_BIN}:${process.env.PATH}`, NODE_BIN,
 const CUSTOM_GUIDE = CONFIG.localGuide ? resolve(ROOT, CONFIG.localGuide) : '';
 const LOCAL_GUIDE = CUSTOM_GUIDE && existsSync(CUSTOM_GUIDE) ? CUSTOM_GUIDE : join(HARNESS, 'mfe-local.md');
 const NO_INSTALL_SCRIPTS = CONFIG.allowInstallScripts ? {} : { npm_config_ignore_scripts: 'true', yarn_ignore_scripts: 'true', YARN_ENABLE_SCRIPTS: 'false' };
-const AGENT_ENV = { ...ENV, ...NO_INSTALL_SCRIPTS, PATH: `${join(HARNESS, 'guard')}:${join(HARNESS, 'bin')}:${ENV.PATH}` };
+const AGENT_ENV = { ...ENV, ...NO_INSTALL_SCRIPTS, DESKCHECK_VISIBLE: '1', PATH: `${join(HARNESS, 'guard')}:${join(HARNESS, 'bin')}:${ENV.PATH}` };
 const GH_USER = CONFIG.github.user;
 const DEFAULT_AGENT = process.env.AGENT || listAgents(ENV.PATH).find((a) => a.available)?.id || AGENTS[0]?.id || '';
 const RUN_FILE = 'run.json';
@@ -65,6 +65,8 @@ const MESSAGES = {
   'pr.searching': () => 'Procurando o PR do colega pelo número do card, das Tasks e das histórias filhas.',
   'pr.none': () => 'Parado: não achei PR aberto ou mergeado com o número do card, das Tasks ou das histórias filhas nos repositórios configurados.',
   'pr.many': (p) => `Achei ${p.count} PRs. Escolha qual testar.`,
+  'prepare.open': (p) => `Janela do Chrome aberta em ${p.url}: faça login e deixe a tela pronta. Depois clique em Continuar e testar (ou feche a janela).`,
+  'prepare.done': () => 'Preparo concluído: a sessão ficou guardada. Começando os testes em janela visível.',
   'pr.chosen': (p) => `PR escolhido: #${p.number} (${p.repo}), branch ${p.branch}, de ${p.author}.`,
   'worktree.ready': (p) => `Código do PR baixado numa worktree só de teste (${p.commit}). Seu checkout não é tocado.`,
   'agent.simulate': (p) => `Modo simulação com ${p.agent}: nada é instalado nem executado.`,
@@ -103,6 +105,7 @@ function sh(cmd, args, opts = {}) {
     const child = spawn(cmd, args, { env: ENV, ...opts });
     let out = '', err = '', timedOut = false;
     const timer = opts.timeoutMs ? setTimeout(() => { timedOut = true; child.kill('SIGTERM'); setTimeout(() => child.kill('SIGKILL'), 5000).unref(); }, opts.timeoutMs) : null;
+    opts.onSpawn?.(child);
     child.stdout.on('data', (d) => { out += d; opts.onData?.(String(d)); });
     child.stderr.on('data', (d) => { err += d; opts.onErr?.(String(d)); });
     child.on('error', (e) => { clearTimeout(timer); done({ code: 1, out, err: String(e) }); });
@@ -428,6 +431,34 @@ async function start(run) {
   } catch (e) { log(run, String(e.message || e), 'bad'); finish(run, 'error'); }
 }
 
+const preparing = new Map();
+
+async function prepareScreen(run) {
+  if (!run.prepareFirst) return;
+  const url = pickEnv(run.env).base;
+  if (!url) return;
+  const stopFile = join(tmpdir(), `deskcheck-prepare-${run.key}-${Date.now()}`);
+  run.prepare = { state: 'open', url };
+  say(run, 'prepare.open', { url }, 'warn');
+  await new Promise((done) => {
+    preparing.set(run.key, { stopFile, done });
+    if (SIMULATE) return;
+    withChrome(() => sh(DC, ['login', '--url', url, '--until-file', stopFile], { cwd: ROOT, timeoutMs: 30 * 60_000 })).then(done, done);
+  });
+  preparing.delete(run.key);
+  rmSync(stopFile, { force: true });
+  run.prepare = { state: 'done', url };
+  say(run, 'prepare.done', {}, 'ok');
+}
+
+function finishPrepare(run) {
+  const p = preparing.get(run.key);
+  if (!p) return false;
+  writeFileSync(p.stopFile, '');
+  if (SIMULATE) p.done();
+  return true;
+}
+
 async function restoreRoleIfPending(run) {
   if (SIMULATE) return;
   const file = join(DC_ROOT, String(run.id), 'user-original.json');
@@ -447,6 +478,7 @@ async function continueWith(run, pr) {
     say(run, 'pr.chosen', { number: pr.number, repo: pr.repo, branch: pr.branch, author: pr.author }, 'ok');
     step(run, 'screen');
     if (!SIMULATE) { await prepareWorktree(run); say(run, 'worktree.ready', { commit: run.commit }, 'ok'); }
+    await prepareScreen(run);
     const agent = findAgent(run.agent);
     say(run, SIMULATE ? 'agent.simulate' : 'agent.start', { agent: agent.name, dataMode: run.dataMode || 'real' });
     try { run.result = await withChrome(() => runAgent(run)); } finally { await restoreRoleIfPending(run); }
@@ -462,10 +494,10 @@ async function continueWith(run, pr) {
 }
 
 
-function newRun(id, agentId, dataMode = 'real', env = 'dev') {
+function newRun(id, agentId, dataMode = 'real', env = 'dev', prepare) {
   const mode = dataMode === 'mock' ? 'mock' : 'real';
   const envId = pickEnv(env).id;
-  const run = { key: seq++, id: Number(id), link: workItemUrl(id), type: '', title: `Card ${id}`, step: 0, stepTimes: {}, status: 'running', agent: agentId, dataMode: mode, env: envId, startedAt: new Date().toISOString(), log: [] };
+  const run = { key: seq++, id: Number(id), link: workItemUrl(id), type: '', title: `Card ${id}`, step: 0, stepTimes: {}, status: 'running', agent: agentId, dataMode: mode, env: envId, prepareFirst: mode === 'real' && (SIMULATE ? prepare === true : prepare !== false), startedAt: new Date().toISOString(), log: [] };
   runs.unshift(run); start(run);
   return run;
 }
@@ -560,13 +592,13 @@ export const server = createServer(async (req, res) => {
     return res.end(readFileSync(file));
   }
   if (req.method === 'POST' && url.pathname === '/api/runs') {
-    const { link, agent, dataMode, env } = await readBody(req);
+    const { link, agent, dataMode, env, prepare } = await readBody(req);
     const m = /(\d{5,7})/.exec(String(link || ''));
     if (!m) return json(res, 400, { error: 'Não achei o número do card nesse link.', code: 'link.noNumber' });
     if (runs.some((r) => r.id === Number(m[1]) && (r.status === 'running' || r.status === 'waiting'))) return json(res, 409, { error: `O card ${m[1]} já está em desk check.`, code: 'card.running', params: { id: m[1] } });
     const picked = pickAgent(agent);
     if (picked.error) return json(res, 400, picked);
-    return json(res, 201, view(newRun(m[1], picked.id, dataMode, env)));
+    return json(res, 201, view(newRun(m[1], picked.id, dataMode, env, prepare)));
   }
   const remove = /^\/api\/runs\/(\d+)$/.exec(url.pathname);
   if (req.method === 'DELETE' && remove) {
@@ -582,6 +614,13 @@ export const server = createServer(async (req, res) => {
     }
     emit();
     return json(res, 200, { ok: true, id: run.id });
+  }
+  const proceed = /^\/api\/runs\/(\d+)\/continue$/.exec(url.pathname);
+  if (req.method === 'POST' && proceed) {
+    const run = runs.find((r) => r.key === Number(proceed[1]));
+    if (!run) return json(res, 404, { error: 'Desk check não encontrado.', code: 'run.notFound' });
+    if (!finishPrepare(run)) return json(res, 409, { error: 'Este desk check não está esperando preparo.', code: 'run.notPreparing' });
+    return json(res, 200, { ok: true });
   }
   const choose = /^\/api\/runs\/(\d+)\/choose$/.exec(url.pathname);
   if (req.method === 'POST' && choose) {

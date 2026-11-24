@@ -435,7 +435,7 @@ export async function guardBrowser(cdp) {
   return blocked;
 }
 
-export async function loginWindow(url, profileDir = DEFAULT_PROFILE, log = (s) => process.stdout.write(s), { readonly = !isLocalUrl(url) && !/^https:\/\/dev\.azure\.com\//i.test(url) } = {}) {
+export async function loginWindow(url, profileDir = DEFAULT_PROFILE, log = (s) => process.stdout.write(s), { readonly = !isLocalUrl(url) && !/^https:\/\/dev\.azure\.com\//i.test(url), stopFile = '' } = {}) {
   const chrome = await launchChrome({ profileDir, headless: false, startUrl: readonly ? 'about:blank' : url });
   let cdp = null;
   try {
@@ -461,6 +461,7 @@ export async function loginWindow(url, profileDir = DEFAULT_PROFILE, log = (s) =
     let sawPage = false;
     let emptyPolls = 0;
     while (chrome.proc.exitCode === null) {
+      if (stopFile && existsSync(stopFile)) break;
       const targets = await Promise.race([cdp.send('Target.getTargets').catch(() => null), chrome.exited.then(() => null)]);
       if (!targets) break;
       const pages = (targets.targetInfos || []).filter((t) => t.type === 'page');

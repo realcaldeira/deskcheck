@@ -158,3 +158,27 @@ test('refuses requests that do not come from the local page', async () => {
   });
   assert.equal(status, 403);
 });
+
+test('waits for the screen to be prepared before testing, then continues', async () => {
+  const r = await post('/api/runs', { link: '654321', prepare: true });
+  assert.equal(r.status, 201);
+  let run;
+  for (let i = 0; i < 40; i++) {
+    await sleep(250);
+    run = (await runs()).find((x) => x.id === 654321);
+    if (run?.prepare?.state === 'open') break;
+  }
+  assert.equal(run.prepare.state, 'open');
+  assert.equal(run.status, 'running');
+  await sleep(1500);
+  assert.equal((await runs()).find((x) => x.id === 654321).status, 'running', 'still waiting for the user');
+  assert.equal((await post(`/api/runs/${run.key}/continue`, {})).status, 200);
+  for (let i = 0; i < 80; i++) {
+    await sleep(250);
+    run = (await runs()).find((x) => x.id === 654321);
+    if (run.status === 'done') break;
+  }
+  assert.equal(run.status, 'done');
+  assert.equal(run.prepare.state, 'done');
+  assert.equal((await post(`/api/runs/${run.key}/continue`, {})).status, 409);
+});

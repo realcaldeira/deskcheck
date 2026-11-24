@@ -517,6 +517,8 @@ a.chip{color:var(--link)} a.chip:hover{border-color:var(--primary);background:va
 .envbar ul{margin:0;padding:0;list-style:none;flex:1 1 320px;min-width:0}
 .envbar li{overflow-wrap:anywhere}
 .envbar li span{opacity:.75}
+.prepopt{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted);cursor:pointer}
+.prepopt input{width:16px;height:16px;accent-color:currentColor}
 </style>
 </head><body>
 <div id="app"></div>
@@ -584,6 +586,7 @@ const STRINGS = {
     "del.title": "Excluir desk check?", "del.body": "Remove o card {id} e os prints da pasta local. Nada é alterado no Azure DevOps.",
     "del.cancel": "Cancelar", "del.confirm": "Excluir", "del.done": "Desk check {id} excluído",
     "side.reload": "Atualizar lista", "search.clear": "Limpar busca",
+    "prep.toggle": "Abrir o navegador antes de testar (login / preparo)", "prep.toggleTitle": "Abre o ambiente numa janela visível do Chrome e espera você entrar e deixar a tela pronta antes de rodar os testes.", "prep.title": "Prepare a tela no Chrome", "prep.text": "Uma janela do Chrome foi aberta em {url}. Faça login (SSO/MFA), feche avisos e deixe a tela no estado que quer testar. A sessão fica guardada para os testes.", "prep.continue": "Continuar e testar",
     "gate.title": "Qual PR testar?", "gate.text": "Achei mais de um PR ligado a este card.", "pr.merged": "mergeado", "pr.draft": "draft", "pr.open": "aberto",
     "tab.summary": "Resumo", "tab.tcs": "Casos de teste", "tab.shots": "Prints", "tab.defects": "Defeitos", "tab.log": "Registro",
     "verdict.label": "Veredito", "verdict.meta": "{n} cenários · {d} defeito(s) apontado(s)", "verdict.ring": "{p}% dos cenários OK", "verdict.fullReport": "Relatório completo", "verdict.copySummary": "Copiar resumo",
@@ -677,6 +680,7 @@ const STRINGS = {
     "del.title": "Delete desk check?", "del.body": "Removes card {id} and its screenshots from the local folder. Nothing is changed in Azure DevOps.",
     "del.cancel": "Cancel", "del.confirm": "Delete", "del.done": "Desk check {id} deleted",
     "side.reload": "Refresh list", "search.clear": "Clear search",
+    "prep.toggle": "Open the browser before testing (login / setup)", "prep.toggleTitle": "Opens the environment in a visible Chrome window and waits for you to sign in and set the screen up before running the tests.", "prep.title": "Set the screen up in Chrome", "prep.text": "A Chrome window was opened at {url}. Sign in (SSO/MFA), dismiss prompts and put the screen in the state you want to test. The session is kept for the tests.", "prep.continue": "Continue and test",
     "gate.title": "Which PR should be tested?", "gate.text": "More than one PR is linked to this card.", "pr.merged": "merged", "pr.draft": "draft", "pr.open": "open",
     "tab.summary": "Summary", "tab.tcs": "Test Cases", "tab.shots": "Screenshots", "tab.defects": "Defects", "tab.log": "Log",
     "verdict.label": "Verdict", "verdict.meta": "{n} scenarios · {d} defect(s) found", "verdict.ring": "{p}% of scenarios OK", "verdict.fullReport": "Full report", "verdict.copySummary": "Copy summary",
@@ -721,6 +725,8 @@ const LOG_EN = {
   "pr.searching": () => "Looking for the teammate's PR by the card, task and child story numbers.",
   "pr.none": () => "Stopped: no open or merged PR mentions the card, task or child story numbers in the configured repositories.",
   "pr.many": (p) => `Found ${p.count} PRs. Pick which one to test.`,
+  "prepare.open": (p) => `Chrome window open at ${p.url}: sign in and get the screen ready. Then click Continue and test (or close the window).`,
+  "prepare.done": () => "Setup finished: the session was kept. Starting the tests in a visible window.",
   "pr.chosen": (p) => `PR chosen: #${p.number} (${p.repo}), branch ${p.branch}, by ${p.author}.`,
   "worktree.ready": (p) => `PR code downloaded into a test-only worktree (${p.commit}). Your checkout is not touched.`,
   "agent.simulate": (p) => `Simulation mode with ${p.agent}: nothing is installed or run.`,
@@ -849,6 +855,8 @@ function App() {
   const loadEnv = useCallback(() => { fetch("/api/doctor").then((r) => r.json()).then(setEnvCheck).catch(() => {}); }, []);
   const [agent, setAgent] = useState(store.get("pipeline.agent", ""));
   const [dataMode, setDataMode] = useState(store.get("pipeline.dataMode", "real") === "mock" ? "mock" : "real");
+  const [prepare, setPrepare] = useState(store.get("pipeline.prepare", "on") !== "off");
+  const choosePrepare = (v) => { setPrepare(v); store.set("pipeline.prepare", v ? "on" : "off"); };
   const [env, setEnv] = useState(store.get("pipeline.env", "dev"));
   const [selected, setSelected] = useState(null);
   const [link, setLink] = useState("");
@@ -938,7 +946,7 @@ function App() {
     if (!String(l).trim()) return setErr({ key: "err.empty" });
     setBusy(true);
     try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch {}
-    const r = await post("/api/runs", { link: l, agent, dataMode, env });
+    const r = await post("/api/runs", { link: l, agent, dataMode, env, prepare });
     setBusy(false);
     if (r.error) return setErr({ response: r });
     setErr(null); if (!target) setLink(""); setSelected(r.key);
@@ -1003,6 +1011,7 @@ function App() {
               h("button", { type: "button", className: "mock", "aria-pressed": String(dataMode === "mock"), title: t("data.mockTitle"), onClick: () => chooseDataMode("mock") }, t("data.mock"))),
             dataMode === "real" && h("div", { className: "seg", role: "group", "aria-label": t("env.group") },
               Object.values(cfg.envs || {}).map((e) => h("button", { key: e.id, type: "button", className: "real", "aria-pressed": String(env === e.id), title: e.label + ": " + e.base.replace(/^https?:\/\//, "") + " (" + t("env.title") + ")", onClick: () => chooseEnv(e.id) }, e.label))))),
+        dataMode === "real" && h("label", { className: "prepopt", title: t("prep.toggleTitle") }, h("input", { type: "checkbox", checked: prepare, onChange: (e) => choosePrepare(e.target.checked) }), h("span", null, t("prep.toggle"))),
         errText && h("p", { className: "err", role: "alert" }, errText))),
 
     !flowHidden && h("section", { className: "inner flowband", "aria-label": t("flow.title") },
@@ -1250,6 +1259,15 @@ function AzureDetailsCard() {
     h("div", { className: "azgrid" }, fields.map(([k, v]) => h("div", { key: k, className: "azf" }, h("small", null, k), h("b", null, v)))));
 }
 
+function PrepareGate({ r }) {
+  const t = useI18n();
+  const [busy, setBusy] = useState(false);
+  return h("div", { className: "gatebox", role: "alert" },
+    h("h3", null, t("prep.title")),
+    h("p", null, t("prep.text", { url: r.prepare.url })),
+    h("button", { className: "btn primary", type: "button", disabled: busy, onClick: () => { setBusy(true); post("/api/runs/" + r.key + "/continue").finally(() => setBusy(false)); } }, Icon("check", 15), t("prep.continue")));
+}
+
 function VerdictRing({ pct, title }) {
   const r = 30, c = 2 * Math.PI * r;
   return h("div", { className: "svgring", title },
@@ -1359,6 +1377,7 @@ function Detail({ r, steps, agents, onRerun, onDelete, onLogin, followOpen, onFo
         h("button", { className: "btn sm primary", type: "button", onClick: onLogin }, Icon("key", 14), t("login.btn")),
         h("button", { className: "btn sm", type: "button", onClick: onRerun }, Icon("redo", 14), t("detail.rerun")))),
 
+    r.prepare && r.prepare.state === "open" && h(PrepareGate, { r }),
     r.status === "waiting" && r.prs && h("div", { className: "gatebox", role: "alert" },
       h("h3", null, t("gate.title")),
       h("p", null, t("gate.text")),
@@ -1584,6 +1603,7 @@ function FollowDrawer({ r, steps, agents, onClose, onJumpTab }) {
           h("button", { className: "toggle-pill", type: "button", "aria-pressed": String(autoFollow), onClick: () => setAutoFollow((v) => !v) }, t("follow.autoScroll")))),
 
       h("div", { className: "drawer-body", ref: bodyRef },
+        r.prepare && r.prepare.state === "open" && h(PrepareGate, { r }),
         r.status === "waiting" && r.prs && h("div", { className: "gatebox", role: "alert" },
           h("h3", null, t("gate.title")),
           h("p", null, t("gate.text")),

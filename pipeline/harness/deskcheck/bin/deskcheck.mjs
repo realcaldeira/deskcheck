@@ -205,7 +205,7 @@ async function main() {
   switch (cmd) {
     case 'login': {
       const url = typeof args.url === 'string' ? args.url : `${orgUrl(typeof args.org === 'string' ? args.org : DEFAULT_ORG)}/`;
-      await loginWindow(url, profileDir);
+      await loginWindow(url, profileDir, undefined, typeof args['until-file'] === 'string' ? { stopFile: path.resolve(args['until-file']) } : {});
       print('Confira com: deskcheck whoami');
       return;
     }
@@ -249,7 +249,7 @@ async function main() {
       mkdirSync(dir, { recursive: true });
       const only = list(args.only);
       const viewport = args.width || args.height ? { ...(args.width ? { width: Number(args.width) } : {}), ...(args.height ? { height: Number(args.height) } : {}) } : undefined;
-      const headed = args.headless ? false : args.headed ? true : hasDisplay();
+      const headed = process.env.DESKCHECK_VISIBLE === '1' ? true : args.headless ? false : args.headed ? true : hasDisplay();
       const fresh = await runPlan(plan, {
         baseUrl: typeof args.url === 'string' ? args.url : undefined,
         outDir: dir,
