@@ -102,7 +102,7 @@ async function main() {
   const cardFile = join(dir, 'card.json');
   mkdirSync(dir, { recursive: true });
   if (!has('--skip-card') || !existsSync(cardFile)) {
-    const r = await sh(DC, ['card', String(id), '--root', DC_ROOT], { cwd: ROOT });
+    const r = await sh(process.execPath, [join(ROOT, 'harness', 'deskcheck', 'bin', 'deskcheck.mjs'), 'card', String(id), '--root', DC_ROOT], { cwd: ROOT, env: { ...process.env, DESKCHECK_PIPELINE: '1', DESKCHECK_ORG: CONFIG.azure.org, DESKCHECK_PROJECT: CONFIG.azure.project } });
     if (r.code !== 0 || !existsSync(cardFile)) throw new Error(`Falha ao ler card ${id}: ${(r.err || r.out).trim()}`);
   }
   const card = JSON.parse(readFileSync(cardFile, 'utf8'));

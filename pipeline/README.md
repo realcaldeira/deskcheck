@@ -36,6 +36,12 @@ O agente recebe o roteiro `harness/desk-check.md`.
 
 Com **Dados reais**, a opção **Abrir o navegador antes de testar (login / preparo)** vem ligada. Antes de rodar os cenários, a esteira abre o ambiente escolhido numa janela visível do Chrome (perfil próprio do deskcheck) e espera: você faz login, fecha avisos e deixa a tela no estado que quer testar. Ao clicar em **Continuar e testar** (ou fechar a janela), a sessão fica guardada e os cenários rodam, também em janela visível, um por Test Case do card. Já está logado? Desligue a opção para ir direto aos testes.
 
+## Máquinas com política de execução
+
+O servidor da esteira roda o motor com o próprio Node e não executa scripts de shell. Mesmo assim ela precisa abrir programas instalados: Google Chrome, `git`, `gh` e o agente escolhido. Se o sistema recusar algum deles (erro `spawn EPERM` ou `EACCES`), `yarn doctor` mostra qual foi, na linha **Permissão para executar**. A esteira não contorna esse bloqueio: a liberação é com o responsável pela máquina.
+
+A trava de comandos do agente (`harness/guard`) e o atalho `harness/bin/deskcheck` são scripts de shell: funcionam em macOS e Linux.
+
 ## Trava de somente leitura
 
 Durante o desk check, `harness/guard` vai na frente do PATH do agente: `git commit/push/reset/merge/rebase…`, `gh api` e `gh pr create/comment/review/merge…`, `az … create/update/delete/invoke…` e `deskcheck defect/evidence/mark/apply` saem com código 87. No fim, a esteira confere se algum arquivo do código do colega mudou.

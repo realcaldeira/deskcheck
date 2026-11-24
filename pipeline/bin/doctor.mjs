@@ -27,15 +27,22 @@ const sh = (cmd, args, timeoutMs = 20_000) =>
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.on('error', (e) => { clearTimeout(timer); done({ code: 1, out, err: String(e) }); });
+    child.on('error', (e) => { clearTimeout(timer); done({ code: 1, out, err: `${e.code || ''} ${e.message || e}`.trim() }); });
     child.on('close', (code) => { clearTimeout(timer); done({ code, out, err }); });
   });
 
 const reach = async (url) => {
-  const r = await sh('curl', ['-s', '-o', '/dev/null', '-m', '8', '-w', '%{http_code}', url], 12_000);
-  const status = Number(r.out.trim());
-  return status ? { ok: true, status } : { ok: false, reason: 'sem resposta' };
+  try {
+    const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    return { ok: true, status: r.status };
+  } catch {
+    const r = await sh('curl', ['-s', '-o', '/dev/null', '-m', '8', '-w', '%{http_code}', url], 12_000);
+    const status = Number(r.out.trim());
+    return status ? { ok: true, status } : { ok: false, reason: 'sem resposta' };
+  }
 };
+
+const blocked = (r) => /\b(EPERM|EACCES)\b/.test(String(r.err));
 
 const checks = [];
 const add = (level, name, detail, fix) => checks.push({ level, name, detail, fix });
@@ -53,6 +60,18 @@ for (const repo of MFE_REPOS) {
 
 const chrome = chromeCandidates().find((p) => existsSync(p));
 add(chrome ? 'ok' : 'bad', 'Chrome', chrome || 'não encontrado', 'instale o Google Chrome');
+
+const programs = [['node', process.execPath, ['--version']], ['git', 'git', ['--version']], ['gh', 'gh', ['--version']], ...(chrome && process.platform !== 'win32' ? [['Chrome', chrome, ['--version']]] : [])];
+const refused = [];
+const missing = [];
+for (const [label, cmd, args] of programs) {
+  const r = await sh(cmd, args, 15_000);
+  if (blocked(r)) refused.push(label);
+  else if (/ENOENT/.test(String(r.err))) missing.push(label);
+}
+add(refused.length ? 'bad' : missing.length ? 'warn' : 'ok', 'Permissão para executar',
+  refused.length ? `o sistema recusou executar: ${refused.join(', ')}` : missing.length ? `não encontrado: ${missing.join(', ')}` : programs.map((x) => x[0]).join(', '),
+  refused.length ? 'bloqueio da máquina (permissão ou política): peça a liberação ao responsável; a esteira não contorna esse bloqueio' : 'instale o que falta');
 
 let gh = GH_USER ? await sh('gh', ['auth', 'token', '--user', GH_USER]) : { code: 1, out: '' };
 const preferred = gh.code === 0 && gh.out.trim();
@@ -76,7 +95,7 @@ add(server.ok ? 'ok' : 'warn', 'Esteira', server.ok ? `no ar em http://localhost
 
 if (quick) add('warn', 'Azure DevOps', 'não conferido (--quick)', 'rode sem --quick');
 else {
-  const who = await sh(DC, ['whoami'], 90_000);
+  const who = await sh(process.execPath, [join(ROOT, 'harness', 'deskcheck', 'bin', 'deskcheck.mjs'), 'whoami'], 90_000);
   add(who.code === 0 ? 'ok' : 'bad', 'Azure DevOps', who.code === 0 ? who.out.trim() : (who.err.trim().split('\n').pop() || 'sem sessão'), `${DC} login`);
 }
 

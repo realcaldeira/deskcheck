@@ -19,6 +19,7 @@ const MFE_REPOS = CONFIG.repos.map((r) => r.name);
 const NODE_BIN = process.env.NODE_BIN || dirname(process.execPath);
 const HARNESS = join(ROOT, 'harness');
 const DC = join(HARNESS, 'bin', 'deskcheck');
+const DC_ENGINE = join(HARNESS, 'deskcheck', 'bin', 'deskcheck.mjs');
 const DC_ROOT = process.env.DESKCHECK_ROOT || join(ROOT, '.deskcheck');
 const WEB = join(ROOT, 'web');
 const ENV = { ...process.env, PATH: `${NODE_BIN}:${process.env.PATH}`, NODE_BIN, DESKCHECK_ORG: CONFIG.azure.org, DESKCHECK_PROJECT: CONFIG.azure.project, DESKCHECK_ZONE_ROLE: CONFIG.zoneRole };
@@ -108,11 +109,13 @@ function sh(cmd, args, opts = {}) {
     opts.onSpawn?.(child);
     child.stdout.on('data', (d) => { out += d; opts.onData?.(String(d)); });
     child.stderr.on('data', (d) => { err += d; opts.onErr?.(String(d)); });
-    child.on('error', (e) => { clearTimeout(timer); done({ code: 1, out, err: String(e) }); });
+    child.on('error', (e) => { clearTimeout(timer); done({ code: 1, out, err: `${e.message || e} (${cmd})${blockedHint(e.code || e.message)}` }); });
     child.on('close', (code) => { clearTimeout(timer); done(timedOut ? { code: 124, out, err: `tempo esgotado depois de ${Math.round(opts.timeoutMs / 60000)} min` } : { code, out, err }); });
   });
 }
 const lastLine = (s) => String(s || '').trim().split('\n').pop();
+const dc = (args, opts = {}) => sh(process.execPath, [DC_ENGINE, ...args], { ...opts, env: { ...ENV, DESKCHECK_PIPELINE: '1', ...(opts.env || {}) } });
+const blockedHint = (text) => (/\b(EPERM|EACCES)\b/.test(String(text)) ? ' O sistema recusou executar esse programa (permissão ou política da máquina): rode yarn doctor para ver qual e peça a liberação ao responsável pela máquina.' : '');
 
 let ghEnv;
 async function githubEnv() {
@@ -198,7 +201,7 @@ async function readCard(run) {
   const file = join(DC_ROOT, String(run.id), 'card.json');
   if (SIMULATE) return normalizeCard(existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : SAMPLE_CARD);
   mkdirSync(DC_ROOT, { recursive: true });
-  const r = await sh(DC, ['card', String(run.id), '--root', DC_ROOT], { cwd: ROOT });
+  const r = await dc(['card', String(run.id), '--root', DC_ROOT], { cwd: ROOT });
   if (r.code !== 0 || !existsSync(file)) throw new Error(`Não consegui ler o card ${run.id}: ${lastLine(r.err || r.out)}. Se pedir login, rode: harness/bin/deskcheck login`);
   return normalizeCard(JSON.parse(readFileSync(file, 'utf8')));
 }
@@ -443,7 +446,7 @@ async function prepareScreen(run) {
   await new Promise((done) => {
     preparing.set(run.key, { stopFile, done });
     if (SIMULATE) return;
-    withChrome(() => sh(DC, ['login', '--url', url, '--until-file', stopFile], { cwd: ROOT, timeoutMs: 30 * 60_000 })).then(done, done);
+    withChrome(() => dc(['login', '--url', url, '--until-file', stopFile], { cwd: ROOT, timeoutMs: 30 * 60_000 })).then(done, done);
   });
   preparing.delete(run.key);
   rmSync(stopFile, { force: true });
@@ -467,7 +470,7 @@ async function restoreRoleIfPending(run) {
   try { backup = JSON.parse(readFileSync(file, 'utf8')); } catch { log(run, `NÃO consegui ler ${file}: confira o papel do usuário na tela de usuários e a cópia ${file}.bak.`, 'bad'); return; }
   if (backup.restored) return;
   log(run, `Restaurando o papel original do usuário (${(backup.original?.roles || []).join(', ')})...`, 'warn');
-  const r = await withChrome(() => sh(join(HARNESS, 'bin', 'deskcheck'), ['role', 'restore', String(run.id), '--root', DC_ROOT], { timeoutMs: 5 * 60_000 }));
+  const r = await withChrome(() => dc(['role', 'restore', String(run.id), '--root', DC_ROOT], { timeoutMs: 5 * 60_000 }));
   if (r.code === 0) log(run, lastLine(r.out) || 'Papel original restaurado.', 'ok');
   else log(run, `NÃO consegui restaurar o papel original: ${lastLine(r.err) || lastLine(r.out)}. Rode: harness/bin/deskcheck role restore ${run.id} --root ${DC_ROOT}`, 'bad');
 }
@@ -553,7 +556,7 @@ export const server = createServer(async (req, res) => {
     const cleanUrl = typeof targetUrl === 'string' && /^https?:\/\//i.test(targetUrl.trim()) ? targetUrl.trim() : '';
     if (SIMULATE) return json(res, 200, { ok: true, simulated: true, url: cleanUrl || 'https://dev.azure.com' });
     const args = ['login', ...(cleanUrl ? ['--url', cleanUrl] : [])];
-    withChrome(() => sh(DC, args, { cwd: ROOT })).catch(() => {});
+    withChrome(() => dc(args, { cwd: ROOT })).catch(() => {});
     return json(res, 200, { ok: true, url: cleanUrl || 'https://dev.azure.com' });
   }
   if (req.method === 'POST' && url.pathname === '/api/reload') {

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAgent, listAgents, extractJson, parseItemEvent } from '../server/agents.mjs';
+import { buildAgent, listAgents, extractJson, parseItemEvent, which } from '../server/agents.mjs';
+import { dirname } from 'node:path';
 
 const plain = buildAgent({ id: 'agent', bin: 'my-agent', args: ['-p', '{prompt}', '{dirs:--add-dir}', '--include', '{dirsCsv}'] });
 const events = buildAgent({ id: 'agent-events', name: 'Events', bin: 'other', output: 'events-json', install: 'install it', args: ['exec', '--json', '-C', '{cwd}', '--output-last-message', '{lastMessage}', '{prompt}'] });
@@ -40,4 +41,11 @@ test('parses item events from a json stream', () => {
   assert.equal(msg.kind, 'agent');
   assert.equal(msg.fullText, 'Done');
   assert.equal(parseItemEvent(JSON.stringify({ type: 'error', message: '403 Forbidden' })).level, 'bad');
+});
+
+test('finds a command on the PATH without running a shell', () => {
+  assert.equal(which('node', dirname(process.execPath)), process.execPath);
+  assert.equal(which('definitely-not-a-command', dirname(process.execPath)), '');
+  assert.equal(which('node', ''), '');
+  assert.equal(which(process.execPath), process.execPath);
 });

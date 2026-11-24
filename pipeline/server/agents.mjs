@@ -1,5 +1,5 @@
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync, statSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 
 import { CONFIG } from './config.mjs';
 
@@ -24,9 +24,20 @@ export function buildAgent(def) {
 
 export const AGENTS = CONFIG.agents.map(buildAgent);
 
-export function which(bin, PATH) {
-  const r = spawnSync('/bin/sh', ['-c', `command -v ${bin}`], { env: { ...process.env, PATH }, encoding: 'utf8' });
-  return r.status === 0 ? r.stdout.trim() : '';
+export function which(bin, PATH = process.env.PATH || '') {
+  if (!bin || /[\\/]/.test(bin)) return bin && existsSync(bin) ? bin : '';
+  const exts = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean) : [''];
+  for (const dir of String(PATH).split(delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      const file = join(dir, bin + ext);
+      try {
+        if (!statSync(file).isFile()) continue;
+        if (process.platform !== 'win32') accessSync(file, constants.X_OK);
+        return file;
+      } catch { continue; }
+    }
+  }
+  return '';
 }
 
 export function resolveBin(agent, PATH) {
