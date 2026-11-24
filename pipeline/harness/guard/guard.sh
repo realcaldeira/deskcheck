@@ -24,21 +24,26 @@ case "$tool" in
       if [ -n "$sub" ]; then rest+=("$a"); continue; fi
       if [ "$skip" = 1 ]; then skip=0; continue; fi
       case "$a" in
-        -c|--config-env|--exec-path|-c*|--config-env=*|--exec-path=*) block "$@" ;;
-        -C|--git-dir|--work-tree|--namespace|--super-prefix) skip=1 ;;
+        -C|--git-dir|--work-tree) skip=1 ;;
+        --git-dir=*|--work-tree=*|--no-pager|--no-optional-locks|--literal-pathspecs) ;;
         --version|--help|-h|-v) sub="version" ;;
-        -*) ;;
+        -*) block "$@" ;;
         *) sub="$a" ;;
       esac
     done
     first="${rest[0]:-}"
+    for a in "${rest[@]:-}"; do
+      case "$a" in
+        --output|--output=*|-O*|--open-files-in-pager*|--exec|--exec=*|--upload-pack*|--receive-pack*|--ext-diff|--textconv|--config|--config=*|--template*|--pager*) block "$@" ;;
+      esac
+      [ "$sub" != "ls-files" ] && [ "$a" = "-o" ] && block "$@"
+    done
     case "$sub" in
-      ""|version|help|status|log|diff|show|rev-parse|rev-list|ls-files|ls-tree|ls-remote|cat-file|blame|grep|describe|merge-base|shortlog|name-rev|check-ignore|check-attr|whatchanged|fetch|clone|archive) ;;
+      ""|version|help|status|log|diff|show|rev-parse|rev-list|ls-files|ls-tree|cat-file|blame|grep|describe|merge-base|shortlog|name-rev|check-ignore|check-attr) ;;
       branch)
         for a in "${rest[@]:-}"; do
-          case "$a" in ""|--list|-l|-a|--all|-r|--remotes|-v|-vv|--verbose|--show-current|--contains|--merged|--no-merged|--format=*|--sort=*) ;; -*) block "$@" ;; esac
-        done
-        case "$first" in ""|-*) ;; *) block "$@" ;; esac ;;
+          case "$a" in ""|--list|-l|-a|--all|-r|--remotes|-v|-vv|--verbose|--show-current) ;; *) block "$@" ;; esac
+        done ;;
       remote)
         case "$first" in
           "") ;;
@@ -49,7 +54,7 @@ case "$tool" in
       config)
         case "$first" in --get|--get-all|--get-regexp|--list|-l) ;; *) block "$@" ;; esac ;;
       worktree|stash)
-        [ "$first" = "list" ] || block "$@" ;;
+        [ "$first" = "list" ] && [ "${#rest[@]}" -le 1 ] || block "$@" ;;
       *) block "$@" ;;
     esac ;;
   gh)

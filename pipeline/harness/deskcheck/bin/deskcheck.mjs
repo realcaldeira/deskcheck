@@ -189,6 +189,10 @@ function showPending(a) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const [cmd, ...pos] = args._;
+  if (process.env.DESKCHECK_PIPELINE && ['defect', 'evidence', 'mark', 'apply', 'discard'].includes(cmd)) {
+    process.stderr.write(`esteira: bloqueado (deskcheck ${cmd}). O desk check só lê o Azure; os defeitos saem no relatório.\n`);
+    process.exit(87);
+  }
   if (!cmd || args.help || args.h || cmd === 'help') {
     print(HELP);
     process.exit(cmd || args.help || args.h ? 0 : 1);

@@ -553,7 +553,9 @@ export const server = createServer(async (req, res) => {
     const base = join(DC_ROOT, report[1]);
     const file = normalize(join(base, decodeURIComponent(report[2])));
     if (!file.startsWith(base + '/') || !existsSync(file) || !statSync(file).isFile()) return json(res, 404, { error: 'Relatório não encontrado.', code: 'report.notFound' });
-    res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+    const type = MIME[extname(file).toLowerCase()];
+    if (!type) return json(res, 404, { error: 'Relatório não encontrado.', code: 'report.notFound' });
+    res.writeHead(200, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox allow-scripts allow-popups; default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; form-action 'none'" });
     return res.end(readFileSync(file));
   }
   if (req.method === 'POST' && url.pathname === '/api/runs') {
