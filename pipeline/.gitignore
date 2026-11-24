@@ -1,0 +1,6 @@
+.deskcheck/
+node_modules/
+.DS_Store
+*.log
+pipeline.config.json
+local/

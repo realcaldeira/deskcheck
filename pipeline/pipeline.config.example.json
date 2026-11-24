@@ -1,0 +1,83 @@
+{
+  "azure": {
+    "org": "my-org",
+    "project": "MY-PROJECT"
+  },
+  "github": {
+    "org": "my-github-org",
+    "user": ""
+  },
+  "reposDir": "~/deskcheck-repos",
+  "repoPrefix": "",
+  "repos": [
+    {
+      "name": "web-app",
+      "app": "web",
+      "port": 3100,
+      "kit": ""
+    },
+    {
+      "name": "admin-app",
+      "app": "admin",
+      "port": 3101,
+      "kit": ""
+    }
+  ],
+  "envs": [
+    {
+      "id": "dev",
+      "label": "DEV",
+      "base": "https://app.dev.example.com",
+      "adminUsers": "https://app.dev.example.com/admin/users",
+      "appUsers": "https://app.dev.example.com/web/admin/users"
+    },
+    {
+      "id": "stg",
+      "label": "STG",
+      "base": "https://app.stg.example.com",
+      "adminUsers": "https://app.stg.example.com/admin/users",
+      "appUsers": "https://app.stg.example.com/web/admin/users"
+    }
+  ],
+  "localGuide": "",
+  "markFields": [
+    {
+      "label": "Desk Check",
+      "ref": "Custom.DeskCheckStandard",
+      "value": true
+    }
+  ],
+  "zoneRole": "",
+  "agents": [
+    {
+      "id": "agent",
+      "name": "Command-line agent",
+      "bin": "my-agent",
+      "install": "install my-agent and sign in",
+      "output": "text",
+      "args": [
+        "-p",
+        "{prompt}",
+        "{dirs:--add-dir}"
+      ]
+    },
+    {
+      "id": "agent-events",
+      "name": "Agent with JSON events",
+      "bin": "my-other-agent",
+      "install": "install my-other-agent and sign in",
+      "output": "events-json",
+      "args": [
+        "exec",
+        "--json",
+        "-C",
+        "{cwd}",
+        "--output-last-message",
+        "{lastMessage}",
+        "{prompt}"
+      ]
+    }
+  ],
+  "allowInstallScripts": false,
+  "translate": false
+}

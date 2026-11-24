@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demo · Partners</title>
+<style>
+  body { font: 15px/1.4 -apple-system, sans-serif; margin: 0; padding: 24px; background: #fafafa; }
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; }
+  .row { padding: 10px; background: #fff; border: 1px solid #ddd; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #eee; }
+  .empty { color: #777; }
+  #toast { display: none; background: #1f7a3d; color: #fff; padding: 8px 12px; border-radius: 6px; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <h1>Pending for final review</h1>
+  <div class="filters">
+    <label for="status">Status</label>
+    <select id="status" aria-label="Filter by status">
+      <option value="">All Status</option>
+      <option value="approve">Approve</option>
+      <option value="disapprove">Disapprove</option>
+    </select>
+    <input id="search" placeholder="Search partner" aria-label="Search partner">
+    <button type="button" id="apply">Apply</button>
+  </div>
+  <div id="list"></div>
+  <div id="toast" role="status">Filters applied</div>
+<script>
+  const data = [
+    { name: 'Partner Alpha', status: 'approve' },
+    { name: 'Partner Beta', status: 'disapprove' },
+    { name: 'Partner Gamma', status: 'approve' },
+  ];
+  const render = () => {
+    const st = document.getElementById('status').value;
+    const q = document.getElementById('search').value.toLowerCase();
+    const rows = data.filter((d) => (!st || d.status === st) && d.name.toLowerCase().includes(q));
+    document.getElementById('list').innerHTML = rows.length
+      ? rows.map((r) => `<div class="row" data-testid="row"><span>${r.name}</span><span class="badge">${r.status === 'approve' ? 'Approve' : 'Disapprove'}</span></div>`).join('')
+      : '<p class="empty">No partner found</p>';
+  };
+  document.getElementById('apply').addEventListener('click', () => {
+    render();
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+  });
+  render();
+  if (location.hash === '#erro') console.error('Erro planejado para o teste');
+</script>
+</body>
+</html>
