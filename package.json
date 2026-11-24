@@ -1,0 +1,18 @@
+{
+  "name": "deskcheck-pipeline",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "bin": { "deskcheck-pipeline": "bin/pipeline.mjs" },
+  "scripts": {
+    "dev": "node server/index.mjs --open",
+    "dev:simulate": "node server/index.mjs --simulate --open",
+    "start": "node server/index.mjs",
+    "pipeline": "node bin/pipeline.mjs",
+    "prepare-card": "node bin/prepare.mjs",
+    "save-run": "node bin/save-run.mjs",
+    "doctor": "node bin/doctor.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

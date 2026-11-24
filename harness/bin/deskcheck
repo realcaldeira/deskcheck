@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -u
+here="$(cd "$(dirname "$0")/.." && pwd)"
+case "${1:-}" in
+  defect|evidence|mark|apply|discard)
+    echo "esteira: bloqueado (deskcheck $1). O desk check só lê o Azure; os defeitos saem no relatório." >&2
+    exit 87 ;;
+esac
+node_bin="${NODE_BIN:-}"
+if [ -n "$node_bin" ] && [ -x "$node_bin/node" ]; then exec "$node_bin/node" "$here/deskcheck/bin/deskcheck.mjs" "$@"; fi
+exec node "$here/deskcheck/bin/deskcheck.mjs" "$@"
