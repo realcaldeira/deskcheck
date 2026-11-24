@@ -19,17 +19,24 @@ block() {
 args=" $* "
 case "$tool" in
   git)
-    sub=""; skip=0
+    sub=""; skip=0; cfg=0
     for a in "$@"; do
+      if [ "$cfg" = 1 ]; then cfg=0; block "$@"; fi
       if [ "$skip" = 1 ]; then skip=0; continue; fi
       case "$a" in
-        -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix|--config-env) skip=1 ;;
+        -c|--config-env|--exec-path) cfg=1 ;;
+        -c*|--config-env=*|--exec-path=*) block "$@" ;;
+        -C|--git-dir|--work-tree|--namespace|--super-prefix) skip=1 ;;
         -*) ;;
         *) sub="$a"; break ;;
       esac
     done
     case "$sub" in
-      commit|push|merge|rebase|reset|cherry-pick|revert|am|tag|filter-branch|replace|notes) block "$@" ;;
+      commit|push|merge|rebase|reset|cherry-pick|revert|am|tag|filter-branch|replace|notes|apply|stash|clean|restore|switch|add|rm|mv|update-ref|symbolic-ref|commit-tree|send-pack|gc|prune) block "$@" ;;
+      remote)
+        case "$args" in *" remote "|*" remote -v "*|*" remote show "*|*" remote get-url "*) ;; *) block "$@" ;; esac ;;
+      config)
+        case "$args" in *" --get "*|*" --get-all "*|*" --get-regexp "*|*" --list "*|*" -l "*) ;; *) block "$@" ;; esac ;;
     esac ;;
   gh)
     case "$args" in

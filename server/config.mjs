@@ -31,6 +31,7 @@ export const CONFIG = {
   localGuide: expand(raw.localGuide),
   zoneRole: raw.zoneRole || '',
   allowInstallScripts: raw.allowInstallScripts === true,
+  translate: raw.translate === true,
   agents: (raw.agents || []).filter((a) => a?.id && a?.bin && Array.isArray(a.args)),
   markFields: (raw.markFields || []).filter((f) => f?.label).map((f) => ({ label: f.label, ref: f.ref || '', value: f.value })),
 };

@@ -99,7 +99,7 @@ async function main() {
     log,
   };
   writeFileSync(join(dir, 'run.json'), JSON.stringify(run, null, 1));
-  try { await fetch(`http://localhost:${PORT}/api/reload`, { method: 'POST' }); } catch {}
+  try { await fetch(`http://localhost:${PORT}/api/reload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch {}
   console.log(`Desk check ${id} salvo em ${join(dir, 'run.json')} (http://localhost:${PORT})`);
 }
 

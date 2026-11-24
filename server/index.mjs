@@ -54,7 +54,7 @@ function emit() {
   for (const res of clients) res.write(data);
 }
 async function ensurePt(run) {
-  await translateRun(run, ptCache, PT_CACHE_FILE, { simulate: SIMULATE });
+  await translateRun(run, ptCache, PT_CACHE_FILE, { simulate: SIMULATE || !CONFIG.translate });
   emit();
 }
 const MESSAGES = {
@@ -205,17 +205,19 @@ const normalizeCard = (card) => ({
   description: card.description,
 });
 
+const mentionsId = (text, id) => new RegExp(`(^|\\D)${id}(\\D|$)`).test(text);
+
 async function findPrs(run) {
   const ids = [run.id, ...(run.card.parent ? [run.card.parent.id] : []), ...run.card.tasks.map((t) => t.id), ...run.card.stories.map((s) => s.id)].map(String);
   const found = [];
   const env = await githubEnv();
   for (const repo of MFE_REPOS) {
     const r = await sh('gh', ['pr', 'list', '-R', `${GH_ORG}/${repo}`, '--state', 'all', '--limit', '200',
-      '--json', 'number,title,headRefName,body,author,state,isDraft,updatedAt,url'], { env });
+      '--json', 'number,title,headRefName,body,author,state,isDraft,updatedAt,url,isCrossRepository'], { env });
     if (r.code !== 0) throw new Error(`Não consegui listar os PRs de ${repo}: ${lastLine(r.err)}`);
     for (const pr of JSON.parse(r.out || '[]')) {
       const haystack = `${pr.title} ${pr.headRefName} ${pr.body || ''}`;
-      if (ids.some((id) => haystack.includes(id)) && pr.state !== 'CLOSED') {
+      if (!pr.isCrossRepository && ids.some((id) => mentionsId(haystack, id)) && pr.state !== 'CLOSED') {
         found.push({ repo, number: pr.number, title: pr.title, branch: pr.headRefName, author: pr.author?.login, state: pr.state, draft: pr.isDraft, updatedAt: pr.updatedAt, url: pr.url });
       }
     }
@@ -479,7 +481,22 @@ function pickAgent(requested) {
   return { id: a.id };
 }
 
+const LOCAL_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`]);
+const LOCAL_ORIGINS = new Set([...LOCAL_HOSTS].map((h) => `http://${h}`));
+
+function requestRefusal(req) {
+  if (!LOCAL_HOSTS.has(String(req.headers.host || '').toLowerCase())) return 'host';
+  if (req.method === 'GET' || req.method === 'HEAD') return '';
+  const origin = req.headers.origin;
+  if (origin && !LOCAL_ORIGINS.has(String(origin).toLowerCase())) return 'origin';
+  if (req.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(req.headers['sec-fetch-site'])) return 'origin';
+  if (req.method === 'POST' && !/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return 'content-type';
+  return '';
+}
+
 export const server = createServer(async (req, res) => {
+  const refused = requestRefusal(req);
+  if (refused) { res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ error: 'Requisição recusada.', code: `forbidden.${refused}` })); }
   const url = new URL(req.url, 'http://localhost');
   if (req.method === 'GET' && url.pathname === '/') { res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); return res.end(readFileSync(join(WEB, 'index.html'))); }
   const asset = /^\/vendor\/([\w.-]+\.js)$/.exec(url.pathname);

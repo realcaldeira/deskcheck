@@ -21,6 +21,7 @@ const run = (cmd, args, extraEnv = {}) => spawnSync(cmd, args, { env: { ...env, 
 for (const [cmd, args] of [
   ['git', ['commit', '-m', 'x']], ['git', ['push']], ['git', ['-C', '.', 'reset', '--hard']], ['git', ['-c', 'a=b', 'commit']],
   ['git', ['--git-dir', '.git', 'rebase', 'x']], ['git', ['--no-pager', 'merge', 'x']],
+  ['git', ['-c', 'alias.st=push', 'st']], ['git', ['-calias.st=push', 'st']], ['git', ['--config-env=alias.st=X', 'st']], ['git', ['config', 'alias.st', 'push']], ['git', ['stash']], ['git', ['remote', 'set-url', 'origin', 'x']],
   ['gh', ['pr', 'comment', '1', '-b', 'x']], ['gh', ['pr', 'create']], ['gh', ['api', 'repos/x/y']],
   ['az', ['boards', 'work-item', 'update', '--id', '1']], ['az', ['devops', 'invoke']],
 ]) {
@@ -36,6 +37,8 @@ test('lets git reads through', () => {
   assert.equal(r.status, 0);
   assert.match(r.stdout, /git version/);
   assert.equal(run(join(GUARD, 'git'), ['-C', SANDBOX, 'status', '--short']).status, 0);
+  assert.equal(run(join(GUARD, 'git'), ['remote', '-v']).status, 0);
+  assert.equal(run(join(GUARD, 'git'), ['config', '--list']).status, 0);
 });
 
 test('no blocked command touched the files', () => {

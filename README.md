@@ -73,6 +73,7 @@ cp pipeline.config.example.json pipeline.config.json
 | `zoneRole` | Papel que exige o campo de zonas na API de usuários, se houver |
 | `agents[]` | Agentes de linha de comando que a esteira pode chamar (veja **Agentes**) |
 | `allowInstallScripts` | `true` libera os scripts de instalação (`postinstall` etc.) do código do PR; por padrão ficam desligados |
+| `translate` | `true` traduz para o português os textos do card que estiverem em inglês. **Envia esses textos a um serviço público de tradução**; por padrão fica desligado |
 | `markFields[]` | Campos que o time preenche ao marcar o Desk Check no card (`label`, `ref`, `value`) |
 
 ## Em outra máquina

@@ -46,11 +46,11 @@ async function findPrs(card, env) {
   const found = [];
   for (const repo of MFE_REPOS) {
     const r = await sh('gh', ['pr', 'list', '-R', `${GH_ORG}/${repo}`, '--state', 'all', '--limit', '200',
-      '--json', 'number,title,headRefName,body,author,state,isDraft,updatedAt,url'], { env });
+      '--json', 'number,title,headRefName,body,author,state,isDraft,updatedAt,url,isCrossRepository'], { env });
     if (r.code !== 0) continue;
     for (const pr of JSON.parse(r.out || '[]')) {
       const hay = `${pr.title} ${pr.headRefName} ${pr.body || ''}`;
-      if (ids.some((id) => hay.includes(id)) && pr.state !== 'CLOSED') {
+      if (!pr.isCrossRepository && ids.some((id) => new RegExp(`(^|\\D)${id}(\\D|$)`).test(hay)) && pr.state !== 'CLOSED') {
         found.push({
           repo,
           number: pr.number,

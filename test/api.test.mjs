@@ -144,3 +144,17 @@ test('deletes a finished run from memory and disk', async () => {
   const again = await fetch(`${BASE}/api/runs/${target.key}`, { method: 'DELETE' });
   assert.equal(again.status, 404);
 });
+
+test('refuses requests that do not come from the local page', async () => {
+  const raw = (headers, method = 'POST') => fetch(BASE + '/api/reload', { method, headers, body: method === 'POST' ? '{}' : undefined }).then((r) => r.status);
+  assert.equal(await raw({ 'Content-Type': 'application/json' }), 200);
+  assert.equal(await raw({ 'Content-Type': 'text/plain' }), 403);
+  assert.equal(await raw({ 'Content-Type': 'application/json', Origin: 'https://evil.example.com' }), 403);
+  assert.equal(await raw({ 'Content-Type': 'application/json', Origin: BASE }), 200);
+  const { request } = await import('node:http');
+  const status = await new Promise((done) => {
+    const req = request({ host: '127.0.0.1', port: PORT, path: '/api/config', headers: { Host: 'evil.example.com' } }, (res) => { res.resume(); done(res.statusCode); });
+    req.end();
+  });
+  assert.equal(status, 403);
+});
