@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listAgents } from '../server/agents.mjs';
-import { CONFIG, configProblems } from '../server/config.mjs';
+import { CONFIG, CONFIG_FILE, configProblems } from '../server/config.mjs';
 import { chromeCandidates } from '../harness/deskcheck/lib/cdp.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -44,7 +44,7 @@ const major = Number(process.versions.node.split('.')[0]);
 add(major >= 22 ? 'ok' : 'bad', 'Node', `v${process.versions.node}`, 'instale o Node 22 ou mais novo');
 
 const problems = configProblems();
-add(problems.length ? 'bad' : 'ok', 'Configuração', problems.length ? problems.join('; ') : 'pipeline.config.json', 'cp pipeline.config.example.json pipeline.config.json e preencha');
+add(problems.length ? 'bad' : 'ok', 'Configuração', problems.length ? problems.join('; ') : CONFIG_FILE, 'cp pipeline.config.example.json pipeline.config.json e preencha');
 
 for (const repo of MFE_REPOS) {
   const ok = existsSync(join(REPOS, repo, '.git'));

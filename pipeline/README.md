@@ -81,7 +81,7 @@ cp pipeline/pipeline.config.example.json pipeline/pipeline.config.json
 Não há instalação: o projeto é Node puro, sem dependências de npm.
 
 1. Tenha Node 22+, Google Chrome, `gh` logado e pelo menos um agente de linha de comando instalado.
-2. Copie o seu `pipeline.config.json` para a pasta `pipeline/`.
+2. Copie o seu `pipeline.config.json` para `~/.config/deskcheck/` (vale para qualquer clone) ou para a pasta `pipeline/`, e rode `yarn` na raiz: ele confere o ambiente e diz o que falta.
 3. Conecte a VPN, se os ambientes exigirem.
 4. `yarn dev` (abre `http://localhost:4310`) ou `yarn start` (só sobe).
 

@@ -405,8 +405,10 @@ node bin/deskcheck.mjs apply A7K2
 A pasta [`pipeline/`](pipeline/README.md) traz um app local que faz o desk check de ponta a ponta a partir do link de um card: lê o card e os Test Cases, acha o pull request, prepara uma worktree isolada, chama um agente de linha de comando para rodar os cenários no Chrome e mostra o veredito com os prints marcados.
 
 ```sh
-cp pipeline/pipeline.config.example.json pipeline/pipeline.config.json   # preencha com os dados do seu time
+yarn          # prepara: cria pipeline/pipeline.config.json a partir do exemplo (se não houver) e confere o ambiente
 yarn dev      # sobe e abre http://localhost:4310
 yarn start    # só sobe
 yarn doctor   # confere se o ambiente está pronto
 ```
+
+O projeto não tem dependências de npm. A configuração do seu time fica fora do repositório: em `pipeline/pipeline.config.json` ou, para valer em qualquer clone da máquina, em `~/.config/deskcheck/pipeline.config.json`. Node 22+, Google Chrome, `gh` logado e um agente de linha de comando precisam estar instalados; o `yarn` avisa o que faltar.

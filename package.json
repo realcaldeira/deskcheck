@@ -11,6 +11,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "postinstall": "node scripts/setup.mjs",
+    "setup": "node scripts/setup.mjs",
     "dev": "node pipeline/server/index.mjs --open",
     "dev:simulate": "node pipeline/server/index.mjs --simulate --open",
     "start": "node pipeline/server/index.mjs",

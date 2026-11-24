@@ -4,7 +4,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const CONFIG_FILE = process.env.DESKCHECK_PIPELINE_CONFIG || join(ROOT, 'pipeline.config.json');
+const LOCAL_CONFIG = join(ROOT, 'pipeline.config.json');
+const HOME_CONFIG = join(homedir(), '.config', 'deskcheck', 'pipeline.config.json');
+export const CONFIG_FILE = process.env.DESKCHECK_PIPELINE_CONFIG || (existsSync(LOCAL_CONFIG) || !existsSync(HOME_CONFIG) ? LOCAL_CONFIG : HOME_CONFIG);
 export const CONFIG_EXAMPLE = join(ROOT, 'pipeline.config.example.json');
 
 const expand = (p) => (typeof p === 'string' && p.startsWith('~/') ? join(homedir(), p.slice(2)) : p || '');
@@ -43,6 +45,7 @@ export function configProblems() {
   if (CONFIG.error) return [`${CONFIG_FILE}: ${CONFIG.error}`];
   const out = [];
   if (!CONFIG.azure.org || !CONFIG.azure.project) out.push('azure.org e azure.project');
+  if (CONFIG.azure.org === 'my-org' || CONFIG.github.org === 'my-github-org') return [`${CONFIG_FILE} ainda está com os valores de exemplo: preencha com os dados do seu time`];
   if (!CONFIG.github.org) out.push('github.org');
   if (!CONFIG.repos.length) out.push('repos (pelo menos um)');
   if (!Object.keys(CONFIG.envs).length) out.push('envs (pelo menos um)');
