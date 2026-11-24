@@ -22,6 +22,8 @@ for (const [cmd, args] of [
   ['git', ['commit', '-m', 'x']], ['git', ['push']], ['git', ['-C', '.', 'reset', '--hard']], ['git', ['-c', 'a=b', 'commit']],
   ['git', ['--git-dir', '.git', 'rebase', 'x']], ['git', ['--no-pager', 'merge', 'x']],
   ['git', ['-c', 'alias.st=push', 'st']], ['git', ['-calias.st=push', 'st']], ['git', ['--config-env=alias.st=X', 'st']], ['git', ['config', 'alias.st', 'push']], ['git', ['stash']], ['git', ['remote', 'set-url', 'origin', 'x']],
+  ['git', ['config', 'user.name', '--get']], ['git', ['config', 'alias.x', '!sh -c "x" --list ']], ['git', ['remote', 'add', 'x', 'remote -v ']], ['git', ['remote', '-v', 'add', 'x', 'y']],
+  ['git', ['branch', '-D', 'main']], ['git', ['branch', 'new-branch']], ['git', ['checkout', '.']], ['git', ['worktree', 'remove', 'x']], ['git', ['update-index', '--refresh']], ['git', ['unknown-subcommand']],
   ['gh', ['pr', 'comment', '1', '-b', 'x']], ['gh', ['pr', 'create']], ['gh', ['api', 'repos/x/y']],
   ['az', ['boards', 'work-item', 'update', '--id', '1']], ['az', ['devops', 'invoke']],
 ]) {
@@ -39,6 +41,9 @@ test('lets git reads through', () => {
   assert.equal(run(join(GUARD, 'git'), ['-C', SANDBOX, 'status', '--short']).status, 0);
   assert.equal(run(join(GUARD, 'git'), ['remote', '-v']).status, 0);
   assert.equal(run(join(GUARD, 'git'), ['config', '--list']).status, 0);
+  for (const args of [['log', '--oneline', '-1'], ['diff', '--stat'], ['branch', '--show-current'], ['branch', '-a'], ['rev-parse', '--git-dir'], ['worktree', 'list'], ['ls-files'], ['config', '--get', 'user.name']]) {
+    assert.notEqual(run(join(GUARD, 'git'), args).status, 87, args.join(' '));
+  }
 });
 
 test('no blocked command touched the files', () => {

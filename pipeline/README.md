@@ -10,8 +10,8 @@ Só leitura: nada é corrigido, commitado ou gravado no Azure nem no GitHub. Os 
 yarn dev                                  # front e back em http://localhost:4310 (abre o navegador)
 yarn dev:simulate                         # mesma tela, sem Azure, GitHub, Chrome nem agente
 yarn pipeline 10042 --agent <id>        # pelo terminal ou pelo chat de qualquer agente
-yarn pipeline --agents                    # quais IAs estão instaladas
-yarn test                                 # trava, adaptadores e API em simulação
+yarn pipeline --agents                    # quais agentes estão instalados
+yarn test:pipeline                        # trava, adaptadores e API em simulação
 ```
 
 Sem dependências de npm: o back é Node 22 puro e o React do front está em `web/vendor/`.
@@ -58,7 +58,7 @@ Durante o desk check, `harness/guard` vai na frente do PATH do agente: `git comm
 Tudo o que é específico do seu time fica em `pipeline.config.json`, que não é versionado:
 
 ```sh
-cp pipeline.config.example.json pipeline.config.json
+cp pipeline/pipeline.config.example.json pipeline/pipeline.config.json
 ```
 
 | Chave | O que é |
@@ -81,7 +81,7 @@ cp pipeline.config.example.json pipeline.config.json
 Não há instalação: o projeto é Node puro, sem dependências de npm.
 
 1. Tenha Node 22+, Google Chrome, `gh` logado e pelo menos um agente de linha de comando instalado.
-2. Copie o seu `pipeline.config.json` para a pasta do projeto.
+2. Copie o seu `pipeline.config.json` para a pasta `pipeline/`.
 3. Conecte a VPN, se os ambientes exigirem.
 4. `yarn dev` (abre `http://localhost:4310`) ou `yarn start` (só sobe).
 

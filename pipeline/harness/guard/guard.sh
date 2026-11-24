@@ -19,24 +19,38 @@ block() {
 args=" $* "
 case "$tool" in
   git)
-    sub=""; skip=0; cfg=0
+    sub=""; skip=0; rest=()
     for a in "$@"; do
-      if [ "$cfg" = 1 ]; then cfg=0; block "$@"; fi
+      if [ -n "$sub" ]; then rest+=("$a"); continue; fi
       if [ "$skip" = 1 ]; then skip=0; continue; fi
       case "$a" in
-        -c|--config-env|--exec-path) cfg=1 ;;
-        -c*|--config-env=*|--exec-path=*) block "$@" ;;
+        -c|--config-env|--exec-path|-c*|--config-env=*|--exec-path=*) block "$@" ;;
         -C|--git-dir|--work-tree|--namespace|--super-prefix) skip=1 ;;
+        --version|--help|-h|-v) sub="version" ;;
         -*) ;;
-        *) sub="$a"; break ;;
+        *) sub="$a" ;;
       esac
     done
+    first="${rest[0]:-}"
     case "$sub" in
-      commit|push|merge|rebase|reset|cherry-pick|revert|am|tag|filter-branch|replace|notes|apply|stash|clean|restore|switch|add|rm|mv|update-ref|symbolic-ref|commit-tree|send-pack|gc|prune) block "$@" ;;
+      ""|version|help|status|log|diff|show|rev-parse|rev-list|ls-files|ls-tree|ls-remote|cat-file|blame|grep|describe|merge-base|shortlog|name-rev|check-ignore|check-attr|whatchanged|fetch|clone|archive) ;;
+      branch)
+        for a in "${rest[@]:-}"; do
+          case "$a" in ""|--list|-l|-a|--all|-r|--remotes|-v|-vv|--verbose|--show-current|--contains|--merged|--no-merged|--format=*|--sort=*) ;; -*) block "$@" ;; esac
+        done
+        case "$first" in ""|-*) ;; *) block "$@" ;; esac ;;
       remote)
-        case "$args" in *" remote "|*" remote -v "*|*" remote show "*|*" remote get-url "*) ;; *) block "$@" ;; esac ;;
+        case "$first" in
+          "") ;;
+          -v|--verbose) [ "${#rest[@]}" -le 1 ] || block "$@" ;;
+          show|get-url) ;;
+          *) block "$@" ;;
+        esac ;;
       config)
-        case "$args" in *" --get "*|*" --get-all "*|*" --get-regexp "*|*" --list "*|*" -l "*) ;; *) block "$@" ;; esac ;;
+        case "$first" in --get|--get-all|--get-regexp|--list|-l) ;; *) block "$@" ;; esac ;;
+      worktree|stash)
+        [ "$first" = "list" ] || block "$@" ;;
+      *) block "$@" ;;
     esac ;;
   gh)
     case "$args" in

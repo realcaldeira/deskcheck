@@ -399,3 +399,14 @@ node bin/deskcheck.mjs apply A7K2
   npm run sync-skill
   ```
   Opcionalmente, defina `DESKCHECK_SKILL` para mudar a pasta de destino e `DESKCHECK_SKILL_LINKS` (caminhos separados por `:` no macOS/Linux ou `;` no Windows) para criar links simbólicos adicionais.
+
+## Esteira (pipeline)
+
+A pasta [`pipeline/`](pipeline/README.md) traz um app local que faz o desk check de ponta a ponta a partir do link de um card: lê o card e os Test Cases, acha o pull request, prepara uma worktree isolada, chama um agente de linha de comando para rodar os cenários no Chrome e mostra o veredito com os prints marcados.
+
+```sh
+cp pipeline/pipeline.config.example.json pipeline/pipeline.config.json   # preencha com os dados do seu time
+yarn dev      # sobe e abre http://localhost:4310
+yarn start    # só sobe
+yarn doctor   # confere se o ambiente está pronto
+```
