@@ -21,9 +21,21 @@ function img(dir, file) {
 function marksLayerHtml(marks) {
   if (!marks?.length) return '';
   return `<div class="shot-marks" data-marks>${marks
-    .map((m) => {
-      const cls = m.status === 'fail' || m.kind === 'fail' ? 'm-fail' : m.kind === 'assert' ? 'm-assert' : 'm-action';
-      return `<span class="s-mark ${cls}" style="left:${m.x}%;top:${m.y}%;width:${m.w}%;height:${m.h}%" title="Passo #${esc(m.step)} · ${esc(m.label)}"><span class="s-mark-n">#${esc(m.step)}</span></span>`;
+    .map((m, i) => {
+      const cls =
+        m.kind === 'dashed'
+          ? 'm-fail m-dashed'
+          : m.status === 'fail' || m.kind === 'fail'
+            ? 'm-fail'
+            : m.kind === 'warn'
+              ? 'm-warn'
+              : m.kind === 'ok' || m.kind === 'assert'
+                ? 'm-assert'
+                : 'm-action';
+      const badge = m.pin ? String(m.pin) : m.step ? `#${m.step}` : String(i + 1);
+      const title = m.step ? `Passo #${m.step} · ${m.label || ''}` : m.label || '';
+      const tip = m.manual && m.label ? `<span class="s-mark-tip">${esc(m.label)}</span>` : '';
+      return `<span class="s-mark ${cls}" style="left:${m.x}%;top:${m.y}%;width:${m.w}%;height:${m.h}%" title="${esc(title)}"><span class="s-mark-n">${esc(badge)}</span>${tip}</span>`;
     })
     .join('')}</div>`;
 }

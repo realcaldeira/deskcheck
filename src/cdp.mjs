@@ -250,6 +250,42 @@ export function isLocalUrl(u) {
   }
 }
 
+const PROD_LABEL = /(^|[.-])(prd|prod|production)([.-]|$)/i;
+const NONPROD_LABEL = /(^|[.-])(dev|development|stg|stage|staging|uat|qa|hml|homolog|sandbox|sbx|preview)([.-]|$)/i;
+const NEVER_WRITE_HOST = /(^|\.)dev\.azure\.com$|(^|\.)visualstudio\.com$|(^|\.)github\.com$/i;
+
+const hostList = (name) =>
+  String(process.env[name] || '')
+    .split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+
+const hostIn = (h, list) => list.some((x) => h === x || h.endsWith(`.${x}`));
+
+export function isProdUrl(u) {
+  try {
+    const { protocol, hostname } = new URL(u);
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    const h = hostname.toLowerCase();
+    return PROD_LABEL.test(h) || hostIn(h, hostList('DESKCHECK_PROD_HOSTS'));
+  } catch {
+    return false;
+  }
+}
+
+export function isWriteAllowedUrl(u) {
+  try {
+    const { protocol, hostname } = new URL(u);
+    if (isLocalUrl(u)) return true;
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    const h = hostname.toLowerCase();
+    if (NEVER_WRITE_HOST.test(h) || isProdUrl(u)) return false;
+    return NONPROD_LABEL.test(h.split('.').slice(0, -1).join('.')) || hostIn(h, hostList('DESKCHECK_WRITE_HOSTS'));
+  } catch {
+    return false;
+  }
+}
+
 export const DOM_QUIET_SCRIPT = `new Promise((resolve) => {
   let last = Date.now();
   const start = last;
@@ -281,14 +317,12 @@ export async function openPage(cdp, { width = 1440, height = 900, readonly = fal
   const isBgResource = (type, url) =>
     /^(Media|EventSource|WebSocket|Ping|Other)$/i.test(String(type || ''))
     || /favicon|hot-update|sockjs-node|__webpack_hmr|\/ws(\?|$)/i.test(String(url || ''));
-  if (readonly) {
 
-    await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+  await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
 
-    await send('Network.setBypassServiceWorker', { bypass: true }).catch(() => undefined);
+  if (readonly) await send('Network.setBypassServiceWorker', { bypass: true }).catch(() => undefined);
 
-    await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
-  }
+  await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
   const guarded = new Set([sessionId]);
   const guardChild = async (child) => {
     guarded.add(child);
@@ -298,12 +332,12 @@ export async function openPage(cdp, { width = 1440, height = 900, readonly = fal
     await cs('Runtime.runIfWaitingForDebugger').catch(() => undefined);
   };
   cdp.on((msg) => {
-    if (!readonly || !guarded.has(msg.sessionId)) return;
+    if (!guarded.has(msg.sessionId)) return;
     const p = msg.params || {};
     if (msg.method === 'Target.attachedToTarget') guardChild(p.sessionId);
     else if (msg.method === 'Fetch.requestPaused') {
       const method = String(p.request?.method || 'GET').toUpperCase();
-      if (isReadRequest(method, p.request?.url, { resourceType: p.resourceType, headers: p.request?.headers, postData: bodyOf(p.request) })) {
+      if (isReadRequest(method, p.request?.url, { resourceType: p.resourceType, headers: p.request?.headers, postData: bodyOf(p.request) }) || (!readonly && isWriteAllowedUrl(p.request?.url))) {
         cdp.send('Fetch.continueRequest', { requestId: p.requestId }, msg.sessionId).catch(() => undefined);
       } else {
         events.blocked.push({ at: Date.now(), method, url: p.request?.url, frame: msg.sessionId === sessionId ? 'aba' : 'iframe/worker' });

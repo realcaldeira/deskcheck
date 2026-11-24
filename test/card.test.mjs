@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildCard, frontsOf, htmlToText, parseSteps, splitCriteria } from '../src/card.mjs';
+import { buildCard, cardMarkdown, frontsOf, htmlToText, parseSteps, splitCriteria } from '../src/card.mjs';
 
 test('critérios em <li> viram AC-n', () => {
   const ac = splitCriteria('<div>Given:</div><ul><li>1. Filter opens in <b>All Status</b></li><li>Status goes to the API&nbsp;request</li></ul>');
@@ -74,4 +74,18 @@ test('buildCard separa Test Cases e Defects', () => {
   assert.equal(c.defects[0].identified, 'Tests');
   assert.deepEqual(c.fronts, ['FRONT']);
   assert.equal(c.acceptanceCriteriaMissing, false);
+  assert.equal(c.parent, null);
+
+  const withParent = buildCard(us, [
+    ...rel,
+    { id: 99, fields: { 'System.WorkItemType': 'Feature', 'System.Title': '[Q4] Portal | Filters', 'System.State': 'Execution', 'System.CreatedDate': '2026-01-01' } },
+  ]);
+  assert.deepEqual(withParent.parent, {
+    id: 99,
+    type: 'Feature',
+    title: '[Q4] Portal | Filters',
+    state: 'Execution',
+    url: '99',
+  });
+  assert.match(cardMarkdown(withParent), /Pai: Feature 99 · \[Q4\] Portal \| Filters \(Execution\)/);
 });

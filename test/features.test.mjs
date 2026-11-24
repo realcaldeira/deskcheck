@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +11,8 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 import { chromeCandidates } from '../src/cdp.mjs';
 import { buildDraftPlan } from '../src/explore.mjs';
-import { coverage, reportHtml, reportJunit, reportMarkdown } from '../src/report.mjs';
+import { coverage, reportHtml, reportJunit, reportMarkdown, azurePreviewHtml } from '../src/report.mjs';
+import { parseDecideScore, parseDecideYesNo, runDecisionCheck } from '../src/decide.mjs';
 import { runPlan, validatePlan } from '../src/runner.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -415,4 +416,108 @@ test('explore --draft gera rascunho de plano válido', () => {
   assert.equal(draft.baseUrl, 'http://localhost:3000');
   assert.equal(draft.beforeEach[0].url, '/partners?tab=all');
   assert.equal(draft.scenarios.length, 2);
+});
+
+test('annotate + preview-azure: desenha marcações manuais sem alterar o PNG e gera prévia HTML estilo Azure Boards', () => {
+  const out = mkdtempSync(path.join(os.tmpdir(), 'deskcheck-ann-'));
+  const shotsDir = path.join(out, 'shots');
+  mkdirSync(shotsDir, { recursive: true });
+  writeFileSync(path.join(shotsDir, 'S1-01-ok.png'), PNG);
+  writeFileSync(path.join(shotsDir, 'S2-01-clip.png'), PNG);
+  const card = {
+    id: 10042,
+    url: 'https://dev.azure.com/org/proj/_workitems/edit/10042',
+    type: 'User Story',
+    title: '[FRONT] For You Widget',
+    state: 'Waiting Tests',
+    assignedTo: 'Dev User',
+    areaPath: 'Proj\\Squad',
+    iterationPath: 'Proj\\Squad\\Sprint 004',
+    fronts: ['FRONT'],
+    tags: [],
+    parent: { id: 200001, type: 'Feature', title: '[Q4] Portal | Home', state: 'Execution', url: 'https://dev.azure.com/org/proj/_workitems/edit/200001' },
+    acceptanceCriteria: [{ id: 'AC-1', text: 'Shows heading' }, { id: 'AC-2', text: 'Cards not clipped' }],
+    testCases: [{ id: 253001, title: 'Heading check', state: 'Design' }, { id: 253002, title: 'Clip check', state: 'Design' }],
+    defects: [],
+  };
+  const results = {
+    version: 1,
+    workItem: 10042,
+    title: card.title,
+    baseUrl: 'http://localhost:3000',
+    viewport: { width: 1440, height: 900 },
+    finishedAt: '2026-11-24T10:00:00.000Z',
+    scenarios: [
+      { id: 'S1', title: 'Heading OK', ac: ['AC-1'], tc: [253001], status: 'pass', verdict: null, note: 'OK', steps: [{ n: 1, do: 'screenshot', desc: 'Print', status: 'pass', shot: 'S1-01-ok.png' }], shots: [{ file: 'S1-01-ok.png', label: 'Hero OK' }], console: [], network: [] },
+      { id: 'S2', title: 'Tablet clipped', ac: ['AC-2'], tc: [253002], status: 'fail', verdict: null, error: 'Clipped at 768px', expected: 'Cards visible', note: 'Cut in half at 768px', steps: [{ n: 1, do: 'expectEval', desc: 'Check height', status: 'fail', error: 'Clipped at 768px' }], shots: [{ file: 'S2-01-clip.png', label: 'Tablet 768px' }], console: [], network: [] },
+    ],
+  };
+  writeFileSync(path.join(out, 'card.json'), JSON.stringify(card));
+  writeFileSync(path.join(out, 'results.json'), JSON.stringify(results));
+
+  const annOut = execFileSync(
+    process.execPath,
+    [bin, 'annotate', 'S2', '--box', '5.5,28.6,87.5,5.8', '--label', 'Cards cortados em 768px', '--kind', 'fail', '--dir', out],
+    { encoding: 'utf8' },
+  );
+  assert.match(annOut, /marcação #1 \(fail\) adicionada/);
+  assert.deepEqual(readFileSync(path.join(shotsDir, 'S2-01-clip.png')), PNG, 'PNG original permanece intocado');
+
+  const repHtml = readFileSync(path.join(out, 'report.html'), 'utf8');
+  assert.match(repHtml, /s-mark-tip/);
+  assert.match(repHtml, /Cards cortados em 768px/);
+
+  const prevOut = execFileSync(
+    process.execPath,
+    [bin, 'preview-azure', '--scope', 'frontend', '--branch', 'origin/develop (2a53bc7)', '--repo', 'web-app', '--dir', out],
+    { encoding: 'utf8' },
+  );
+  assert.match(prevOut, /azure-preview\.html/);
+  const azHtml = readFileSync(path.join(out, 'azure-preview.html'), 'utf8');
+  assert.match(azHtml, /PRÉVIA LOCAL DE PUBLICAÇÃO NO AZURE DEVOPS/);
+  assert.match(azHtml, /Somente Frontend/);
+  assert.match(azHtml, /Feature/);
+  assert.match(azHtml, /200001/);
+  assert.match(azHtml, /Cards cortados em 768px/);
+  assert.match(azHtml, /Evidence of test:/);
+
+  const direct = azurePreviewHtml(JSON.parse(readFileSync(path.join(out, 'results.json'), 'utf8')), card, out, { scope: 'frontend' });
+  assert.match(direct, /DEF-01/);
+
+  execFileSync(process.execPath, [bin, 'annotate', 'S2', '--clear', '--dir', out]);
+  const cleared = JSON.parse(readFileSync(path.join(out, 'results.json'), 'utf8'));
+  assert.equal(cleared.scenarios[1].shots[0].marks, undefined);
+});
+
+test('decide: parser de SIM/NÃO, score e runDecisionCheck sem depender de rede', async () => {
+  const yn = parseDecideYesNo('NÃO  (prob. de sim: 3%, confiança: 97%)');
+  assert.equal(yn.answer, 'NÃO');
+  assert.equal(yn.yesProb, 3);
+  assert.equal(yn.confidence, 97);
+
+  const sc = parseDecideScore('score 2.58  (confiança: 66%)\n  0. baixa 1%\n  1. media 6%\n  2. alta 26%\n  3. muito_alta 66%');
+  assert.equal(sc.score, 2.58);
+  assert.equal(sc.topLabel, 'muito_alta');
+  assert.equal(sc.highPct, 92);
+
+  const out = mkdtempSync(path.join(os.tmpdir(), 'deskcheck-dec-'));
+  writeFileSync(path.join(out, 'card.md'), '# US 1');
+  writeFileSync(path.join(out, 'report.md'), '# Report');
+  const calls = [];
+  const res = await runDecisionCheck({
+    dir: out,
+    results: { scenarios: [] },
+    scope: 'frontend',
+    runner: async (args) => {
+      calls.push(args);
+      return args.includes('--score')
+        ? 'score 2.66 (confiança: 75%)\n  0. baixa 2%\n  1. media 5%\n  2. alta 18%\n  3. muito_alta 75%'
+        : 'NÃO (prob. de sim: 4%, confiança: 96%)';
+    },
+  });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0][0], /somente|frontend/i);
+  assert.equal(res.approve.answer, 'NÃO');
+  assert.equal(res.approve.confidence, 96);
+  assert.equal(res.accuracy.highPct, 93);
 });

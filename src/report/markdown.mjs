@@ -10,6 +10,11 @@ export function reportMarkdown(results, card) {
   if (card) L.push(`Card: ${card.url}`);
   L.push(`Tela: ${results.baseUrl || '-'} · ${results.viewport.width}×${results.viewport.height} · ${when(results.finishedAt)}${results.readonly ? ' · somente leitura (escritas barradas na rede)' : ''}${results.strict ? ' · modo estrito' : ''}`, '');
   L.push(`**${statusIcon(v.kind)} ${v.text}** (${s.pass} ok · ${s.warn} ressalvas · ${s.fail} falhas · ${s.blocked} bloqueados) · Confiança: **${q.confidence.label} (${q.confidence.score}%)** (${q.confidence.summary})`, '');
+  if (results.decision) {
+    const d = results.decision;
+    const acc = d.accuracy?.highPct != null ? ` · Assertividade: ${d.accuracy.topLabel || '-'} (${d.accuracy.highPct}% alta/muito alta)` : '';
+    L.push(`Segunda opinião: **${d.approve?.answer || '-'}**${d.approve?.confidence != null ? ` (${d.approve.confidence}% confiança)` : ''}${acc}`, '');
+  }
   L.push('| Cenário | Critério / TC | Resultado | Observação |', '|---|---|---|---|');
   for (const sc of results.scenarios) {
     const st = finalStatus(sc);

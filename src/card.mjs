@@ -116,7 +116,18 @@ export function buildCard(item, related = [], { link = (id) => String(id) } = {}
   const rels = item.relations || [];
   const testedBy = new Set(rels.filter((r) => r.rel === 'Microsoft.VSTS.Common.TestedBy-Forward').map(relId));
   const children = new Set(rels.filter((r) => r.rel === 'System.LinkTypes.Hierarchy-Forward').map(relId));
+  const parentId = rels.filter((r) => r.rel === 'System.LinkTypes.Hierarchy-Reverse').map(relId).find(Number.isFinite);
   const byId = new Map(related.map((r) => [Number(r.id), r]));
+  const parentRaw = parentId ? byId.get(parentId) : null;
+  const parent = parentRaw
+    ? {
+        id: Number(parentRaw.id),
+        type: parentRaw.fields?.['System.WorkItemType'] || '',
+        title: parentRaw.fields?.['System.Title'] || '',
+        state: parentRaw.fields?.['System.State'] || '',
+        url: link(parentRaw.id),
+      }
+    : null;
   const pick = (type) =>
     related
       .filter((r) => r.fields?.['System.WorkItemType'] === type && (testedBy.has(Number(r.id)) || children.has(Number(r.id))))
@@ -137,6 +148,7 @@ export function buildCard(item, related = [], { link = (id) => String(id) } = {}
     fronts: frontsOf(f['System.Tags'], f['System.Title']),
     areaPath: f['System.AreaPath'],
     iterationPath: f['System.IterationPath'],
+    parent,
     deskCheck: f['Custom.DeskCheckStandard'] ?? null,
     description: htmlToText(f['System.Description'] || f['Microsoft.VSTS.TCM.ReproSteps'] || ''),
     acceptanceCriteriaText: htmlToText(acHtml),
@@ -168,7 +180,7 @@ export function buildCard(item, related = [], { link = (id) => String(id) } = {}
 export async function fetchCard(az, id) {
   const item = await az.getWorkItem(id);
   const ids = (item.relations || [])
-    .filter((r) => r.rel === 'Microsoft.VSTS.Common.TestedBy-Forward' || r.rel === 'System.LinkTypes.Hierarchy-Forward')
+    .filter((r) => r.rel === 'Microsoft.VSTS.Common.TestedBy-Forward' || r.rel === 'System.LinkTypes.Hierarchy-Forward' || r.rel === 'System.LinkTypes.Hierarchy-Reverse')
     .map(relId)
     .filter(Number.isFinite);
   const related = ids.length ? await az.getWorkItems(ids, RELATED_FIELDS) : [];
@@ -179,6 +191,7 @@ export function cardMarkdown(c) {
   const L = [];
   L.push(`# ${c.type} ${c.id} · ${c.title}`, '');
   L.push(`- Link: ${c.url}`);
+  if (c.parent) L.push(`- Pai: ${c.parent.type} ${c.parent.id} · ${c.parent.title} (${c.parent.state})`);
   L.push(`- Estado: ${c.state} · Responsável: ${c.assignedTo || '-'} · Desk Check: ${c.deskCheck === true ? 'marcado' : 'não marcado'}`);
   L.push(`- Frente: ${c.fronts.length ? c.fronts.map((x) => `[${x}]`).join(' ') : '(sem tag de frente)'} · Tags: ${c.tags.join(', ') || '-'}`);
   L.push(`- Iteration: ${c.iterationPath || '-'}`, '');

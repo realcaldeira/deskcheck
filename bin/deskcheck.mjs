@@ -13,9 +13,10 @@ const { DEFAULT_PROFILE, DeskcheckError, loginWindow, withChrome } = await imp('
 const { DEFAULT_ORG, DEFAULT_PROJECT, browserTransport, createAzure, orgUrl } = await imp('azure.mjs');
 const { cardMarkdown, fetchCard } = await imp('card.mjs');
 const { runPlan, statusIcon, summarize, validatePlan } = await imp('runner.mjs');
-const { reportHtml, reportJunit, reportMarkdown, verdictOf } = await imp('report.mjs');
+const { reportHtml, reportJunit, reportMarkdown, verdictOf, azurePreviewHtml } = await imp('report.mjs');
 const { explore, exploreSummary } = await imp('explore.mjs');
 const { applyAction, buildDefect, buildEvidence, buildMark, discardPending, findPending, listPending, markDefectInResults, savePending } = await imp('actions.mjs');
+const { runDecisionCheck } = await imp('decide.mjs');
 
 const HELP = `deskcheck — desk check de User Story / Technical Story / Bug (Azure DevOps), sem token.
 
@@ -37,6 +38,14 @@ Leitura (sem risco):
                                          data-testid, texto e print → explore.json e explore.png (--draft cria plan.draft.json)
   deskcheck verdict <cenário> --status pass|warn|fail|blocked|auto [--note "o que viu"] [--dir <pasta>]
                                          registra o veredito revisado (auto volta ao resultado automático)
+  deskcheck annotate <cenário> --box x,y,w,h --label "..." [--kind fail|warn|ok|dashed] [--shot <arquivo>] [--pin "1"] [--pos bottom|right|bottom-left] [--clear] [--dir <pasta>]
+                                         desenha marcações de erro sobre o print no HTML (sem alterar o PNG/JPG)
+  deskcheck preview-azure [id] [--dir <pasta>] [--scope frontend|backend|full] [--branch "..."] [--repo "..."] [--open]
+                                         gera prévia HTML estilo Azure Boards (azure-preview.html) sem gravar nada no Azure
+  deskcheck decide [id] [--dir <pasta>] [--scope frontend|backend|full]
+                                         segunda opinião opcional via CLI decide; salva em results.json
+  deskcheck role <backup|set|restore|status> <id> --url <tela de usuários> [--roles a,b]
+                                         troca o papel do PRÓPRIO usuário em ambiente de teste, com backup e restauração conferida
   deskcheck report [--dir <pasta>] [--open]
                                          regera o relatório
 
@@ -57,7 +66,7 @@ Opções gerais:
   --profile <pasta>   perfil do Chrome que guarda os logins (padrão ${DEFAULT_PROFILE})
   --headed            mostra a janela do Chrome também em card, whoami e apply (o run já mostra)
   --readonly          força o modo somente leitura (fora de localhost ele já liga sozinho)
-  --allow-writes      desliga o somente leitura (só em ambiente local/dev, nunca em PRD)
+  --allow-writes      libera escritas só para localhost e hosts de teste (dev, stg, uat...); o resto segue barrado na rede
   --json              saída em JSON
 
 Precisa de Node 22+ e de Google Chrome, Chromium ou Edge (ou CHROME_PATH).`;
@@ -334,6 +343,116 @@ async function main() {
       print(`${statusIcon(verdictOf(results).kind)} ${verdictOf(results).text}`);
       return;
     }
+    case 'annotate': {
+      const id = pos[0];
+      if (!id) throw new DeskcheckError('uso: deskcheck annotate <cenário> --box x,y,w,h --label "..." [--kind fail|warn|ok|dashed] [--shot <arquivo>] [--clear] [--dir <pasta>]');
+      const dir = resolveDir(args);
+      const { results, card } = loadDir(dir);
+      if (!results) throw new DeskcheckError(`sem results.json em ${dir}`);
+      const sc = results.scenarios.find((x) => x.id === id);
+      if (!sc) throw new DeskcheckError(`cenário ${id} não está em ${dir}/results.json`);
+      const shot =
+        typeof args.shot === 'string'
+          ? (sc.shots || []).find((s) => s.file === args.shot || s.file.includes(args.shot))
+          : (sc.shots || []).find((s) => !/falha/.test(s.file)) || (sc.shots || [])[0];
+      if (!shot) throw new DeskcheckError(`print não encontrado no cenário ${id}`);
+      if (args.clear) {
+        shot.marks = (shot.marks || []).filter((m) => !m.manual);
+        if (!shot.marks.length) delete shot.marks;
+        if (typeof args.box !== 'string') {
+          writeReports(dir, results, card);
+          print(`${id} (${shot.file}): marcações manuais removidas.`);
+          return;
+        }
+      }
+      const nums = typeof args.box === 'string' ? args.box.split(',').map((n) => Number(n.trim())) : [];
+      if (nums.length !== 4 || nums.some((n) => !Number.isFinite(n))) {
+        throw new DeskcheckError('informe --box x,y,w,h em porcentagem (ex.: --box 5.5,28.6,87.5,5.8)');
+      }
+      const kind = typeof args.kind === 'string' ? args.kind : 'fail';
+      if (!['fail', 'warn', 'ok', 'dashed'].includes(kind)) {
+        throw new DeskcheckError('kind inválido: use fail, warn, ok ou dashed');
+      }
+      const [x, y, w, h] = nums;
+      const mark = {
+        x,
+        y,
+        w,
+        h,
+        kind,
+        status: kind === 'fail' || kind === 'dashed' ? 'fail' : kind,
+        label: typeof args.label === 'string' ? args.label : '',
+        pin: typeof args.pin === 'string' ? args.pin : String((shot.marks || []).filter((m) => m.manual).length + 1),
+        pos: typeof args.pos === 'string' ? args.pos : 'bottom',
+        ...(args['pin-right'] ? { pinPos: 'right' } : {}),
+        manual: true,
+      };
+      shot.marks = [...(shot.marks || []), mark];
+      writeReports(dir, results, card);
+      print(`${id} (${shot.file}): marcação #${mark.pin} (${kind}) adicionada em [${x},${y},${w},${h}]%.`);
+      return;
+    }
+    case 'preview-azure': {
+      const dir = resolveDir(args, pos[0]);
+      const { results, card } = loadDir(dir);
+      if (!results) throw new DeskcheckError(`sem results.json em ${dir}`);
+      const scope = typeof args.scope === 'string' ? args.scope : 'full';
+      const outPath = typeof args.out === 'string' ? path.resolve(args.out) : path.join(dir, 'azure-preview.html');
+      const html = azurePreviewHtml(results, card, dir, {
+        scope,
+        branch: typeof args.branch === 'string' ? args.branch : '',
+        repo: typeof args.repo === 'string' ? args.repo : '',
+        pending: listPending(dir),
+      });
+      writeFileSync(outPath, html);
+      print(`Prévia Azure DevOps (somente local, nada gravado): ${outPath}`);
+      if (args.open) openOnScreen(outPath);
+      return;
+    }
+    case 'decide': {
+      const dir = resolveDir(args, pos[0]);
+      const { results, card } = loadDir(dir);
+      if (!results) throw new DeskcheckError(`sem results.json em ${dir}`);
+      const scope = typeof args.scope === 'string' ? args.scope : 'full';
+      const decision = await runDecisionCheck({ dir, results, scope });
+      results.decision = decision;
+      writeReports(dir, results, card);
+      const previewPath = path.join(dir, 'azure-preview.html');
+      if (existsSync(previewPath)) {
+        writeFileSync(previewPath, azurePreviewHtml(results, card, dir, { scope, pending: listPending(dir) }));
+      }
+      if (args.json) return print(JSON.stringify(decision, null, 2));
+      print(`Segunda opinião · Aprovação: ${decision.approve.answer}${decision.approve.confidence != null ? ` (${decision.approve.confidence}% confiança)` : ''}`);
+      if (decision.accuracy.score != null) {
+        print(`Segunda opinião · Assertividade: ${decision.accuracy.topLabel} (score ${decision.accuracy.score}/${decision.accuracy.max}${decision.accuracy.highPct != null ? ` · ${decision.accuracy.highPct}% alta/muito alta` : ''})`);
+      }
+      return;
+    }
+    case 'role': {
+      const action = pos[0];
+      if (!['backup', 'set', 'restore', 'status'].includes(action)) throw new DeskcheckError('uso: deskcheck role <backup|set|restore|status> <id> --url <tela de usuários> [--roles a,b] [--role-title <id>] [--dir <pasta>]');
+      const dir = typeof args.dir === 'string' ? path.resolve(args.dir) : path.join(path.resolve(typeof args.root === 'string' ? args.root : '.deskcheck'), String(pos[1] || ''));
+      if (typeof args.dir !== 'string' && !pos[1]) throw new DeskcheckError('informe o id do card ou --dir.');
+      const roles = await imp('roles.mjs');
+      if (action === 'status') {
+        const st = roles.roleStatus(dir);
+        print(args.json ? JSON.stringify(st) : st.text);
+        if (st.state === 'pending') process.exitCode = 3;
+        return;
+      }
+      const saved = roles.readBackup(dir);
+      const url = typeof args.url === 'string' ? args.url : saved?.url;
+      if (!url) throw new DeskcheckError('informe --url com a tela de usuários (ex.: https://<ambiente de teste>/admin/users).');
+      const out = await roles.withRoleSession(url, { profileDir: typeof args.profile === 'string' ? path.resolve(args.profile) : DEFAULT_PROFILE, log: (s) => process.stderr.write(s) }, ({ session, fetchImpl }) => {
+        if (action === 'backup') return roles.backupRole({ dir, url, session, fetchImpl });
+        if (action === 'set') return roles.setRole({ dir, url, session, fetchImpl, roles: String(args.roles || '').split(',').map((x) => x.trim()).filter(Boolean), roleTitleId: typeof args['role-title'] === 'string' ? args['role-title'] : undefined });
+        return roles.restoreRole({ dir, session, fetchImpl });
+      });
+      if (action === 'backup') print(out.created ? `Backup salvo em ${path.join(dir, roles.ROLE_FILE)}: ${out.backup.original.roles.join(', ')}` : `Backup anterior mantido (restauração pendente): ${out.backup.original.roles.join(', ')}`);
+      else if (action === 'set') print(`Papel trocado para ${out.now.roles.join(', ')} (original guardado: ${out.backup.original.roles.join(', ')}). Rode "deskcheck role restore" ao terminar.`);
+      else print(out.already ? 'Já estava restaurado.' : `Papel original restaurado e conferido: ${out.now.roles.join(', ')}`);
+      return;
+    }
     case 'report': {
       const dir = resolveDir(args, pos[0]);
       const { results, card } = loadDir(dir);
@@ -393,11 +512,12 @@ async function main() {
     }
     case 'mark': {
       const usId = Number(pos[0]);
-      if (!usId) throw new DeskcheckError('uso: deskcheck mark <usId>');
+      if (!usId) throw new DeskcheckError('uso: deskcheck mark <usId> [--fields <arquivo.json>]');
       const dir = resolveDir(args, usId);
       const { results, card } = loadDir(dir);
       if (!results) throw new DeskcheckError(`sem results.json em ${dir}: rode deskcheck run antes.`);
-      showPending(savePending(dir, buildMark({ card, results, force: Boolean(args.force) })));
+      const fieldsFile = [typeof args.fields === 'string' ? args.fields : '', process.env.DESKCHECK_MARK_FIELDS || '', path.join(path.dirname(dir), 'mark-fields.json'), path.join(process.env.HOME || '', '.config', 'deskcheck', 'mark-fields.json')].filter(Boolean).map((f) => path.resolve(f)).find((f) => existsSync(f));
+      showPending(savePending(dir, buildMark({ card, results, force: Boolean(args.force), ...(fieldsFile ? { fields: readJson(fieldsFile) } : {}) })));
       return;
     }
     case 'pending': {

@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { DeskcheckError, isLocalUrl, openPage, sleep, withChrome } from './cdp.mjs';
+import { DeskcheckError, isLocalUrl, isWriteAllowedUrl, openPage, sleep, withChrome } from './cdp.mjs';
 import { OVERLAY_SCRIPT } from './overlay.mjs';
 import { PAGE_HELPER } from './page-helper.mjs';
 
@@ -674,9 +674,12 @@ export function summarize(scenarios) {
 
 export const finalStatus = (sc) => sc.verdict || sc.status;
 
+function planUrls(plan, baseUrl) {
+  return [baseUrl, ...[...(plan.beforeEach || []), ...plan.scenarios.flatMap((s) => s.steps || [])].filter((s) => s.do === 'goto' && /^[a-z]+:/i.test(s.url)).map((s) => s.url)].filter(Boolean);
+}
+
 export function needsReadonly(plan, baseUrl) {
-  const urls = [baseUrl, ...[...(plan.beforeEach || []), ...plan.scenarios.flatMap((s) => s.steps || [])].filter((s) => s.do === 'goto' && /^[a-z]+:/i.test(s.url)).map((s) => s.url)].filter(Boolean);
-  return urls.some((u) => !isLocalUrl(u));
+  return planUrls(plan, baseUrl).some((u) => !isLocalUrl(u));
 }
 
 export async function runPlan(plan, { baseUrl, outDir, planDir, headed = false, slowMo, only, profileDir, viewport, readonly = 'auto', strict = false, retries = 0, log = () => {} }) {
@@ -688,6 +691,9 @@ export async function runPlan(plan, { baseUrl, outDir, planDir, headed = false, 
   const picked = plan.scenarios.filter((sc) => !only?.length || only.includes(sc.id));
   if (!picked.length) throw new DeskcheckError(`nenhum cenário com id ${only.join(', ')}`);
   const ro = readonly === 'auto' ? needsReadonly(plan, base) : Boolean(readonly);
+  const denied = ro ? [] : planUrls(plan, base).filter((u) => !isWriteAllowedUrl(u));
+  if (denied.length) throw new DeskcheckError(`escritas (--allow-writes) só valem em localhost e em ambientes de teste (dev, stg, uat...). Recusado: ${denied.join(', ')}`);
+  if (!ro) log('Escritas liberadas só para localhost e hosts de teste (dev, stg, uat...): qualquer outro destino continua barrado na rede.\n');
   if (ro) log('Modo somente leitura: POST/PUT/PATCH/DELETE são barrados na rede (só o login da Microsoft passa).\n');
   const startedAt = new Date().toISOString();
   const scenarios = await withChrome({ profileDir, headless: !headed }, async (cdp) => {

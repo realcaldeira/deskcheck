@@ -4,7 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { chromeCandidates, isLocalUrl, isReadRequest } from '../src/cdp.mjs';
+import { chromeCandidates, isLocalUrl, isProdUrl, isReadRequest, isWriteAllowedUrl } from '../src/cdp.mjs';
 import { needsReadonly, runPlan } from '../src/runner.mjs';
 
 const hasChrome = chromeCandidates().some((p) => existsSync(p));
@@ -117,6 +117,68 @@ test('somente leitura no run: POST de iframe de outro site também é barrado', 
     assert.ok(seen.some((s) => s.includes('/frame')), `iframe não carregou: ${seen.join(', ')}`);
     assert.ok(!seen.some((s) => s.startsWith('POST')), `servidor recebeu: ${seen.join(', ')}`);
     assert.deepEqual(r.scenarios[0].blockedRequests.map((b) => b.method), ['POST']);
+  } finally {
+    server.close();
+  }
+});
+
+test('escritas liberadas: só localhost e hosts de teste', () => {
+  assert.equal(isWriteAllowedUrl('http://localhost:3000/api/save'), true);
+  assert.equal(isWriteAllowedUrl('https://app.dev.example.com/admin/users'), true);
+  assert.equal(isWriteAllowedUrl('https://app.stg.example.com/admin/users'), true);
+  assert.equal(isWriteAllowedUrl('https://api-uat.example.com/x'), true);
+  assert.equal(isWriteAllowedUrl('https://app.example.com/admin/users'), false);
+  assert.equal(isWriteAllowedUrl('https://api.app.example.com/x'), false);
+  assert.equal(isWriteAllowedUrl('https://www.example.com/x'), false);
+  assert.equal(isWriteAllowedUrl('https://app.prd.example.com/x'), false);
+  assert.equal(isWriteAllowedUrl('https://dev.prod.example.com/x'), false);
+  assert.equal(isWriteAllowedUrl('https://dev.azure.com/org/_apis/wit/workitems/1'), false);
+  assert.equal(isWriteAllowedUrl('https://api.github.com/repos/x/y/issues'), false);
+  assert.equal(isWriteAllowedUrl('https://developer.example.com/x'), false);
+  assert.equal(isWriteAllowedUrl('https://services.app.example.dev/api/x'), false);
+  assert.equal(isWriteAllowedUrl('https://services.uat.example.dev/api/x'), true);
+  assert.equal(isProdUrl('https://app-prod.example.com'), true);
+  assert.equal(isProdUrl('https://product.example.com'), false);
+  process.env.DESKCHECK_PROD_HOSTS = 'app.example.com';
+  process.env.DESKCHECK_WRITE_HOSTS = 'lab.example.org';
+  try {
+    assert.equal(isProdUrl('https://api.app.example.com/x'), true);
+    assert.equal(isWriteAllowedUrl('https://x.lab.example.org/save'), true);
+  } finally {
+    delete process.env.DESKCHECK_PROD_HOSTS;
+    delete process.env.DESKCHECK_WRITE_HOSTS;
+  }
+});
+
+test('escritas liberadas: plano que aponta para host fora de teste é recusado', async () => {
+  const plan = { scenarios: [{ id: 'S1', title: 't', steps: [{ do: 'goto', url: '/a' }] }] };
+  await assert.rejects(() => runPlan(plan, { baseUrl: 'https://app.example.com/', outDir: mkdtempSync(path.join(os.tmpdir(), 'deskcheck-w-')), readonly: false }), /só valem em localhost/);
+});
+
+test('escritas liberadas: o POST local chega e o POST para host fora de teste é barrado na rede', { skip: !hasChrome && 'sem Chrome', timeout: 60_000 }, async () => {
+  const seen = [];
+  const page = `<!doctype html><button id="save">Save</button><p id="local">idle</p><p id="remote">idle</p>
+<script>document.getElementById('save').onclick = async () => {
+  try { const r = await fetch('/api/save', { method: 'POST', body: '{"x":1}' }); document.getElementById('local').textContent = 'local saved ' + r.status; }
+  catch (e) { document.getElementById('local').textContent = 'local blocked'; }
+  try { await fetch('https://api.app.example.com/save', { method: 'POST', body: '{"x":1}' }); document.getElementById('remote').textContent = 'remote saved'; }
+  catch (e) { document.getElementById('remote').textContent = 'remote blocked'; }
+};</script>`;
+  const server = http.createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/') return res.end(page);
+    res.end('{}');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}/`;
+  const out = mkdtempSync(path.join(os.tmpdir(), 'deskcheck-w-'));
+  try {
+    const plan = { scenarios: [{ id: 'S1', title: 'Clicar em Save', steps: [{ do: 'click', role: 'button', name: 'Save' }, { do: 'expectText', text: 'local saved 200' }, { do: 'expectText', text: 'remote blocked' }] }] };
+    const r = await runPlan(plan, { baseUrl: base, outDir: out, profileDir: path.join(out, 'chrome'), readonly: false });
+    assert.equal(r.readonly, false);
+    assert.equal(r.scenarios[0].status, 'pass', r.scenarios[0].error);
+    assert.deepEqual(r.scenarios[0].blockedRequests.map((b) => `${b.method} ${b.url}`), ['POST https://api.app.example.com/save']);
+    assert.ok(seen.includes('POST /api/save'), `servidor recebeu: ${seen.join(', ')}`);
   } finally {
     server.close();
   }

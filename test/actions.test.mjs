@@ -70,11 +70,17 @@ test('Evidência segue o padrão "Evidence of test:" e não fecha TC com cenári
   assert.throws(() => buildEvidence({ card, results, tcId: 900, close: true }), /não fecho/);
 });
 
-test('Marcar Desk Check exige Defect para cada falha (ou --force)', () => {
+test('Marcar Desk Check exige Defect para cada falha (ou --force) e preenche os campos de Details do Azure', () => {
   const { card, results } = fixture();
   assert.throws(() => buildMark({ card, results }), /sem Defect/);
   results.scenarios[1].defects = [777];
-  assert.equal(buildMark({ card, results }).payload.ops[0].path, '/fields/Custom.DeskCheckStandard');
+  const m = buildMark({ card, results });
+  const byPath = Object.fromEntries(m.payload.ops.map((o) => [o.path, o.value]));
+  assert.equal(byPath['/fields/Custom.DeskCheckStandard'], true);
+  assert.equal(m.payload.ops.length, 1);
+  const custom = buildMark({ card, results, fields: [{ label: 'Desk Check', ref: 'Custom.DeskCheckStandard', value: true }, { label: 'Reviewed with', ref: 'Custom.ReviewTool', value: 'deskcheck' }] });
+  assert.deepEqual(custom.payload.ops.map((o) => o.path), ['/fields/Custom.DeskCheckStandard', '/fields/Custom.ReviewTool']);
+  assert.match(custom.preview, /Reviewed with \(Custom\.ReviewTool\): deskcheck/);
 });
 
 test('montar ações não chama o Azure; cliente sem allowWrite recusa escrita', async () => {
@@ -93,7 +99,7 @@ test('montar ações não chama o Azure; cliente sem allowWrite recusa escrita',
 
 test('nenhum módulo além de actions.applyAction chama as funções de escrita', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  for (const f of ['bin/deskcheck.mjs', 'src/card.mjs', 'src/runner.mjs', 'src/report.mjs', 'src/report/html.mjs', 'src/report/quality.mjs', 'src/report/markdown.mjs']) {
+  for (const f of ['bin/deskcheck.mjs', 'src/card.mjs', 'src/runner.mjs', 'src/report.mjs', 'src/report/html.mjs', 'src/report/quality.mjs', 'src/report/markdown.mjs', 'src/report/azure-preview.mjs', 'src/decide.mjs']) {
     const src = readFileSync(path.join(root, f), 'utf8');
     assert.doesNotMatch(src, /\.(createWorkItem|updateWorkItem|addComment|uploadAttachment)\(/, f);
   }

@@ -175,17 +175,25 @@ export function buildEvidence({ card, results, tcId, scenarioIds, shots, close }
   };
 }
 
-export function buildMark({ card, results, force }) {
+export const DEFAULT_MARK_FIELDS = [{ label: 'Desk Check', ref: 'Custom.DeskCheckStandard', value: true }];
+
+export function buildMark({ card, results, force, fields = DEFAULT_MARK_FIELDS }) {
   if (!card) throw new DeskcheckError('card.json não encontrado nesta pasta: rode deskcheck card <id> antes.');
   const bad = results.scenarios.filter((s) => ['fail', 'blocked'].includes(finalStatus(s)) && !s.defects?.length);
   if (bad.length && !force) {
     throw new DeskcheckError(`não marco o Desk Check: ${bad.map((s) => s.id).join(', ')} falharam sem Defect aberto. Abra os Defects (deskcheck defect) ou use --force.`);
   }
+  const list = (fields?.length ? fields : DEFAULT_MARK_FIELDS).filter((f) => f?.ref);
+  const ops = list.map((f) => ({ op: 'add', path: `/fields/${f.ref}`, value: f.value }));
   return {
     kind: 'mark',
     target: { id: card.id },
-    preview: `Marcar "Desk Check" (Custom.DeskCheckStandard = true) na ${card.type} ${card.id} (${card.title})${bad.length ? `\n  Atenção: ${bad.length} cenário(s) com falha sem Defect (--force)` : ''}`,
-    payload: { id: card.id, ops: [{ op: 'add', path: '/fields/Custom.DeskCheckStandard', value: true }] },
+    preview: [
+      `Marcar Desk Check na ${card.type} ${card.id} (${card.title})`,
+      ...list.map((f) => `  ${f.label || f.ref} (${f.ref}): ${f.value === true ? 'True' : f.value}`),
+      ...(bad.length ? [`  Atenção: ${bad.length} cenário(s) com falha sem Defect (--force)`] : []),
+    ].join('\n'),
+    payload: { id: card.id, ops },
   };
 }
 

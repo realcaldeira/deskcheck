@@ -333,7 +333,19 @@ Sempre que a URL testada **não** for `localhost` / `127.0.0.1`, o modo somente 
 - Somente o fluxo de autenticação (Microsoft, SAML e Keycloak) é permitido.
 - Qualquer tentativa de escrita barrada aparece registrada no relatório.
 
-Você também pode forçar esse modo localmente com `--readonly`. Nunca use `--allow-writes` em produção.
+Você também pode forçar esse modo localmente com `--readonly`.
+
+Com `--allow-writes` a rede continua inspecionada: só passam escritas para `localhost` e para hosts de teste (`dev`, `stg`, `uat`...; outros via `DESKCHECK_WRITE_HOSTS`). Qualquer outro destino segue barrado, e um plano que aponte para um host fora de teste é recusado antes de abrir o Chrome.
+
+### Trocar o papel do próprio usuário em ambiente de teste
+
+```sh
+deskcheck role set 10042 --url https://app.dev.example.com/admin/users --roles editor
+deskcheck role restore 10042
+deskcheck role status 10042
+```
+
+`role set` guarda o cadastro original em `.deskcheck/<id>/user-original.json` na primeira troca, altera só o usuário logado e confere pela API que a troca valeu. `role restore` devolve o cadastro original e confere que ficou idêntico. O comando recusa hosts que não sejam de teste.
 
 ---
 
