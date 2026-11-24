@@ -34,9 +34,14 @@ case "$tool" in
     first="${rest[0]:-}"
     for a in "${rest[@]:-}"; do
       case "$a" in
-        --output|--output=*|-O*|--open-files-in-pager*|--exec|--exec=*|--upload-pack*|--receive-pack*|--ext-diff|--textconv|--config|--config=*|--template*|--pager*) block "$@" ;;
+        --?*)
+          name="${a%%=*}"
+          for danger in --output --open-files-in-pager --exec --upload-pack --receive-pack --ext-diff --textconv --config --template --pager --paginate; do
+            case "$danger" in "$name"*) block "$@" ;; esac
+          done ;;
+        -[!-]*)
+          case "$a" in *O*) block "$@" ;; esac ;;
       esac
-      [ "$sub" != "ls-files" ] && [ "$a" = "-o" ] && block "$@"
     done
     case "$sub" in
       ""|version|help|status|log|diff|show|rev-parse|rev-list|ls-files|ls-tree|cat-file|blame|grep|describe|merge-base|shortlog|name-rev|check-ignore|check-attr) ;;
@@ -69,6 +74,7 @@ case "$tool" in
     esac ;;
 esac
 
+if [ "$tool" = "git" ]; then export GIT_PAGER=cat PAGER=cat GIT_CONFIG_NOSYSTEM=1; unset GIT_EXTERNAL_DIFF; fi
 bin="$(real)"
 [ -n "$bin" ] || { echo "esteira: $tool não encontrado no PATH" >&2; exit 127; }
 exec "$bin" "$@"
